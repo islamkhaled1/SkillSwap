@@ -3,10 +3,10 @@
 This document provides the authoritative Entity Relationship Diagram (ERD) and relational catalog for the finalized SkillSwap database schema.
 
 > **Source of Truth:**
-> - [ApplicationDbContext.cs](file:///D:/SkillSwap/src/SkillSwap.Infrastructure/Persistence/ApplicationDbContext.cs)
-> - [EF Core Entity Configurations](file:///D:/SkillSwap/src/SkillSwap.Infrastructure/Persistence/Configurations/)
-> - [Domain Entities](file:///D:/SkillSwap/src/SkillSwap.Domain/Entities/)
-> - [DATABASE.md](file:///D:/SkillSwap/docs/DATABASE.md)
+> - [ApplicationDbContext.cs](../src/SkillSwap.Infrastructure/Persistence/ApplicationDbContext.cs)
+> - [EF Core Entity Configurations](../src/SkillSwap.Infrastructure/Persistence/Configurations/)
+> - [Domain Entities](../src/SkillSwap.Domain/Entities/)
+> - [DATABASE.md](DATABASE.md)
 >
 > **Vector Graphic:** A rendered standalone vector diagram is available in [`docs/ERD.svg`](ERD.svg).
 
