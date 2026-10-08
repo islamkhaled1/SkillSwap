@@ -1,0 +1,71 @@
+﻿# .NET build outputs
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Visual Studio
+.vs/
+*.rsuser
+*.MobaXterm
+
+# Rider
+.idea/
+*.iml
+
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# User secrets (never commit)
+**/appsettings.*.local.json
+**/secrets.json
+**/*.pfx
+**/*.p12
+
+# EF Core migrations (DO NOT ignore; migrations MUST be committed)
+# Migrations/ is intentionally NOT listed here
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coveragexml
+
+# Logs
+logs/
+*.log
+
+# Publish output
+publish/
+wwwroot/dist/
+
+# Environment files (NEVER commit real .env files)
+.env
+.env.*
+!.env.example
+
+# Docker (future)
+*.env.docker
+
+appsettings.Local.json
+**/appsettings.Local.json
