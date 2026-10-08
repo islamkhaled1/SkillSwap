@@ -37,37 +37,58 @@ SkillSwap lets users teach skills they know and learn skills from others using *
 
 ---
 
+## Database Schema & Entity Relationship Diagram (ERD)
+
+The SkillSwap database schema contains **22 entities** modeling time-banking, peer exchanges, and user safety:
+
+- **Complete ERD Specification & Catalog:** [`docs/ERD.md`](docs/ERD.md)
+- **Standalone Vector Graphic:** [`docs/ERD.svg`](docs/ERD.svg)
+- **Technical Entity Specifications (Source of Truth):** [`docs/DATABASE.md`](docs/DATABASE.md)
+
+### Entity Relationship Diagram Preview
+
+![SkillSwap ERD](docs/ERD.svg)
+
+### Key Relational Highlights:
+1. **Financial Core:** `ApplicationUser (1) <-> (1) Wallet (1) <-> (N) CreditTransaction <- (N) Session`. Balances (`AvailableMinutes`, `HeldMinutes`) cannot be negative. No direct Wallet-to-Session FK exists; all session transactions flow through the append-only `CreditTransaction` ledger.
+2. **Swap Negotiation to Session:** `SwapRequest` (`RequesterId` = Learner, `ReceiverId` = Teacher) spawns a 1:1 `Conversation` and schedules one or more `Session` records.
+3. **Multi-User Role Clarity:** `ApplicationUser` participates in explicit dual roles across `SwapRequest` (Learner vs Teacher), `Session` (Learner vs Teacher), `Review` (Reviewer vs Reviewee), `UserBlock` (Blocker vs Blocked), `Favorite`, and `Report`.
+
+---
+
 ## Official Solution & Repository Structure
 
 The official solution file is **`SkillSwap.sln`**. All developers must use `SkillSwap.sln`.
 
 ```text
 SkillSwap/
-??? SkillSwap.sln              <- Official Visual Studio / dotnet solution
-??? README.md                  <- Project entry point
-??? .gitignore                 <- Git exclusion rules
-??? .github/                   <- GitHub templates (PR template)
-??? docs/                      <- Architectural & business specifications
-?   ??? Business-Rules.md      <- Authoritative business rules
-?   ??? DATABASE.md            <- Database & entity specification (Source of Truth)
-?   ??? FINANCIAL-ENGINE.md    <- Financial concurrency & locking guarantees
-?   ??? CONTRIBUTING.md        <- Contribution guidelines
-?   ??? team/                  <- Official 5-Member Team Operating Manual
-?       ??? README.md          <- Team documentation entry point & hierarchy
-?       ??? TEAM-ARCHITECTURE.md <- Complete technical architecture & contract matrix
-?       ??? TEAM-WORKFLOW.md   <- Git workflow, review rules, migration policy
-?       ??? MEMBER-1-AUTH-PROFILE.md    <- Ownership guide: Member 1
-?       ??? MEMBER-2-SKILLS-MATCHING.md  <- Ownership guide: Member 2
-?       ??? MEMBER-3-SWAP-CHAT.md       <- Ownership guide: Member 3
-?       ??? MEMBER-4-SESSION-WALLET.md  <- Ownership guide: Member 4 (Financial Lead)
-?       ??? MEMBER-5-PLATFORM.md        <- Ownership guide: Member 5
-??? src/
-?   ??? SkillSwap.Domain/          <- Core domain models, 22 entities, enums, exceptions
-?   ??? SkillSwap.Application/     <- Use cases, DTOs, service abstractions (no Infra/API refs)
-?   ??? SkillSwap.Infrastructure/  <- EF Core DbContext, Identity, locking, migrations
-?   ??? SkillSwap.API/             <- REST Controllers, SignalR ChatHub, Program.cs
-??? tests/
-    ??? SkillSwap.Tests/           <- xUnit unit tests & SQL Server concurrency tests
+|-- SkillSwap.sln              <- Official Visual Studio / dotnet solution
+|-- README.md                  <- Project entry point
+|-- .gitignore                 <- Git exclusion rules
+|-- .github/                   <- GitHub templates (PR template)
+|-- docs/                      <- Architectural & business specifications
+|   |-- ERD.md                 <- Canonical Entity Relationship Diagram & catalog
+|   |-- ERD.svg                <- Standalone vector graphic of the database ERD
+|   |-- Business-Rules.md      <- Authoritative business rules
+|   |-- DATABASE.md            <- Database & entity specification (Source of Truth)
+|   |-- FINANCIAL-ENGINE.md    <- Financial concurrency & locking guarantees
+|   |-- CONTRIBUTING.md        <- Contribution guidelines
+|   `-- team/                  <- Official 5-Member Team Operating Manual
+|       |-- README.md          <- Team documentation entry point & hierarchy
+|       |-- TEAM-ARCHITECTURE.md <- Complete technical architecture & contract matrix
+|       |-- TEAM-WORKFLOW.md   <- Git workflow, review rules, migration policy
+|       |-- MEMBER-1-AUTH-PROFILE.md    <- Ownership guide: Member 1
+|       |-- MEMBER-2-SKILLS-MATCHING.md  <- Ownership guide: Member 2
+|       |-- MEMBER-3-SWAP-CHAT.md       <- Ownership guide: Member 3
+|       |-- MEMBER-4-SESSION-WALLET.md  <- Ownership guide: Member 4 (Financial Lead)
+|       `-- MEMBER-5-PLATFORM.md        <- Ownership guide: Member 5
+|-- src/
+|   |-- SkillSwap.Domain/          <- Core domain models, 22 entities, enums, exceptions
+|   |-- SkillSwap.Application/     <- Use cases, DTOs, service abstractions (no Infra/API refs)
+|   |-- SkillSwap.Infrastructure/  <- EF Core DbContext, Identity, locking, migrations
+|   `-- SkillSwap.API/             <- REST Controllers, SignalR ChatHub, Program.cs
+`-- tests/
+    `-- SkillSwap.Tests/           <- xUnit unit tests & SQL Server concurrency tests
 ```
 
 ---
