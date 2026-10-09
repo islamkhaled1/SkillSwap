@@ -8,6 +8,7 @@ using SkillSwap.Application.Services;
 using SkillSwap.Infrastructure.BackgroundJobs;
 using SkillSwap.Infrastructure.Identity;
 using SkillSwap.Infrastructure.Persistence;
+using SkillSwap.Infrastructure.Repositories;
 using SkillSwap.Infrastructure.Services;
 
 namespace SkillSwap.Infrastructure;
@@ -69,6 +70,13 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
+
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<ISkillRepository, SkillRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<ISkillService, SkillService>();
 
         // ── Locking, Wallet, Quota, Booking & Session Engine ────────────────
         services.AddScoped<IWalletLockService, SqlWalletLockService>();
