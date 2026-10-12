@@ -171,3 +171,20 @@ Endpoints will be available at:
 
 ---
 *SkillSwap Backend Engineering Team*
+
+## Team Contributions and Publication Status
+
+### Member 2 - Skills, Availability and Matching
+- **GitHub:** [@mariowael](https://github.com/mariowael)
+- **Member Code:** /119
+- **Module:** Skills, Availability and Matching
+- **Pull Request:** [PR #3 - Task for Member 2 /119](https://github.com/islamkhaled1/SkillSwap/pull/3) from mariowael/main into develop
+- **Publication Status:** Pull request merged into develop on 2026-10-12 (merge commit caa7149, source commit b27e6ea authored by Mario Wael).
+
+### Member 4 - Session and Wallet
+- **Name:** Islam Khaled
+- **GitHub:** [@islamkhaled1](https://github.com/islamkhaled1)
+- **Member Code:** /115
+- **Module:** Session and Wallet / Financial Engine
+- **Branch:** [feature/session-wallet](https://github.com/islamkhaled1/SkillSwap/tree/feature/session-wallet)
+- **Publication Status:** Uploaded to GitHub on 2026-10-12 (commit 526f6f9). Not yet merged into develop.
