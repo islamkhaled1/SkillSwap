@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.Json;
 using SkillSwap.Domain.Exceptions;
 
@@ -44,6 +44,7 @@ public sealed class GlobalExceptionHandlingMiddleware
         var (statusCode, title) = exception switch
         {
             NotFoundException => (HttpStatusCode.NotFound, "Resource Not Found"),
+            UnauthorizedSessionAccessException => (HttpStatusCode.Forbidden, "Forbidden"),
             DomainException   => (HttpStatusCode.BadRequest, "Domain Rule Violation"),
             UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized"),
             _                 => (HttpStatusCode.InternalServerError, "An unexpected error occurred")

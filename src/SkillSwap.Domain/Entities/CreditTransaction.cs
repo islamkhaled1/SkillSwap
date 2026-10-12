@@ -1,4 +1,4 @@
-﻿using SkillSwap.Domain.Enums;
+using SkillSwap.Domain.Enums;
 
 namespace SkillSwap.Domain.Entities;
 
@@ -12,6 +12,7 @@ public class CreditTransaction
     public int HeldDelta { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public string? Description { get; set; }
+    public string? IdempotencyKey { get; set; }
 
     public Wallet Wallet { get; set; } = null!;
     public Session? Session { get; set; }

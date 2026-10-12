@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\SkillSwap.Domain\SkillSwap.Domain.csproj" />
     <ProjectReference Include="..\..\src\SkillSwap.Application\SkillSwap.Application.csproj" />
     <ProjectReference Include="..\..\src\SkillSwap.Infrastructure\SkillSwap.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SkillSwap.API\SkillSwap.API.csproj" />
   </ItemGroup>
 
 </Project>
