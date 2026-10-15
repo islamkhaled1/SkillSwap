@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SkillSwap.Domain.Entities;
 
@@ -31,11 +31,20 @@ public class CreditTransactionConfiguration : IEntityTypeConfiguration<CreditTra
         builder.Property(ct => ct.Description)
             .HasMaxLength(500);
 
+        builder.Property(ct => ct.IdempotencyKey)
+            .HasMaxLength(100);
+
         // Filtered unique index to protect against duplicate Hold/Release/Capture/Earn operations for the same Session + Wallet
         builder.HasIndex(ct => new { ct.WalletId, ct.SessionId, ct.Type })
             .IsUnique()
             .HasFilter("[SessionId] IS NOT NULL AND [Type] IN (2, 3, 4, 5)")
             .HasDatabaseName("UX_CreditTransaction_Wallet_Session_Type");
+
+        // Filtered unique index to guarantee persistent idempotency for keyed transactions (e.g. administrative bonuses)
+        builder.HasIndex(ct => ct.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("[IdempotencyKey] IS NOT NULL")
+            .HasDatabaseName("UX_CreditTransaction_IdempotencyKey");
 
         builder.HasIndex(ct => new { ct.WalletId, ct.CreatedAtUtc })
             .HasDatabaseName("IX_CreditTransaction_WalletId_CreatedAtUtc");

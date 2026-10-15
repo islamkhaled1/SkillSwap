@@ -1,4 +1,4 @@
-﻿namespace SkillSwap.Application.DTOs.Auth;
+namespace SkillSwap.Application.DTOs.Auth;
 
 /// <summary>
 /// Returned after successful authentication.
@@ -10,4 +10,5 @@ public sealed class AuthResponseDto
     public DateTime ExpiresAtUtc { get; init; }
     public Guid UserId { get; init; }
     public string Email { get; init; } = string.Empty;
+    public IReadOnlyList<string> Roles { get; init; } = [];
 }

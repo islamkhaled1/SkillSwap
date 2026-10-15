@@ -1,4 +1,4 @@
-﻿using SkillSwap.API.Extensions;
+using SkillSwap.API.Extensions;
 using SkillSwap.API.Hubs;
 using SkillSwap.API.Middleware;
 using SkillSwap.Infrastructure;
@@ -13,7 +13,7 @@ builder.Services.AddControllers();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Authentication & Authorization (JWT Bearer)
-builder.Services.AddSkillSwapAuthentication(builder.Configuration);
+builder.Services.AddSkillSwapAuthentication(builder.Configuration, builder.Environment);
 
 // Swagger / OpenAPI with JWT support
 builder.Services.AddSkillSwapSwagger();
@@ -46,7 +46,15 @@ var app = builder.Build();
 // Global exception handling - must be first
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
-if (app.Environment.IsDevelopment())
+// Swagger is enabled in Development automatically, or in any environment
+// when the Swagger:Enabled configuration key is explicitly set to true.
+// To enable on MonsterASP.NET: set environment variable Swagger__Enabled=true
+// Leave unset or set to false to keep Swagger hidden in Production.
+var swaggerEnabled =
+    app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>("Swagger:Enabled");
+
+if (swaggerEnabled)
 {
     app.UseSkillSwapSwagger();
 }

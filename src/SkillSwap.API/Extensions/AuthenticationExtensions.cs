@@ -1,5 +1,6 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using SkillSwap.Infrastructure.Services;
 
@@ -12,18 +13,35 @@ public static class AuthenticationExtensions
 {
     public static IServiceCollection AddSkillSwapAuthentication(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
-            ?? throw new InvalidOperationException(
-                $"JWT configuration section '{JwtSettings.SectionName}' is missing.");
+            ?? new JwtSettings();
 
-        if (string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
-            throw new InvalidOperationException(
-                "JWT SecretKey is not configured. Provide it via Jwt:SecretKey " +
-                "in appsettings or environment variables.");
+        // Support fallback to Jwt:Key or environment variable Jwt__Key if not bound via section
+        if (string.IsNullOrWhiteSpace(jwtSettings.SigningKey))
+        {
+            var fallbackKey = configuration["Jwt:Key"]
+                ?? configuration["Jwt__Key"]
+                ?? configuration["Jwt:SecretKey"]
+                ?? configuration["Jwt__SecretKey"];
 
-        var key = Encoding.UTF8.GetBytes(jwtSettings.SecretKey);
+            if (!string.IsNullOrWhiteSpace(fallbackKey))
+            {
+                jwtSettings.Key = fallbackKey;
+            }
+        }
+
+        var isProduction = environment?.IsProduction() ??
+            string.Equals(
+                configuration["ASPNETCORE_ENVIRONMENT"] ?? configuration["DOTNET_ENVIRONMENT"],
+                "Production",
+                StringComparison.OrdinalIgnoreCase);
+
+        JwtSettingsValidator.Validate(jwtSettings, isProduction);
+
+        var key = Encoding.UTF8.GetBytes(jwtSettings.SigningKey);
 
         services
             .AddAuthentication(options =>

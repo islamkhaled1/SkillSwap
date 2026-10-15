@@ -316,6 +316,10 @@ namespace SkillSwap.Infrastructure.Migrations
                     b.Property<int>("HeldDelta")
                         .HasColumnType("int");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<long?>("SessionId")
                         .HasColumnType("bigint");
 
@@ -326,6 +330,11 @@ namespace SkillSwap.Infrastructure.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CreditTransaction_IdempotencyKey")
+                        .HasFilter("[IdempotencyKey] IS NOT NULL");
 
                     b.HasIndex("SessionId")
                         .HasDatabaseName("IX_CreditTransaction_SessionId");

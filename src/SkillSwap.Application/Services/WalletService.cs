@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SkillSwap.Application.Abstractions;
 using SkillSwap.Application.Common;
 using SkillSwap.Application.DTOs.Wallets;
@@ -86,43 +86,134 @@ public class WalletService : IWalletService
         return Result.Success<IReadOnlyList<CreditTransactionDto>>(txs);
     }
 
-    public async Task<Result<CreditTransactionDto>> ApplyBonusAsync(Guid userId, int minutes, string description, CancellationToken cancellationToken = default)
+    public async Task<Result<CreditTransactionDto>> ApplyBonusAsync(
+        Guid userId,
+        int minutes,
+        string description,
+        string? idempotencyKey = null,
+        CancellationToken cancellationToken = default)
     {
         if (minutes <= 0)
             return Result.Failure<CreditTransactionDto>("Bonus minutes must be greater than zero.");
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-
-        var wallet = await _walletLockService.AcquireWalletLockAsync(userId, cancellationToken);
-        wallet.AvailableMinutes += minutes;
-        wallet.UpdatedAtUtc = _dateTimeProvider.UtcNow;
-
-        var ledgerEntry = new CreditTransaction
+        // Fast-path pre-check for existing idempotency key before acquiring transaction locks
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            WalletId = userId,
-            SessionId = null,
-            Type = CreditTransactionType.Bonus,
-            AvailableDelta = minutes,
-            HeldDelta = 0,
-            CreatedAtUtc = _dateTimeProvider.UtcNow,
-            Description = description
-        };
+            var existing = await _context.CreditTransactions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ct => ct.IdempotencyKey == idempotencyKey, cancellationToken);
 
-        _context.CreditTransactions.Add(ledgerEntry);
-        await _context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            if (existing != null)
+            {
+                return ValidateAndMapExistingBonus(existing, userId, minutes, description);
+            }
+        }
 
-        var dto = new CreditTransactionDto(
-            ledgerEntry.Id,
-            ledgerEntry.WalletId,
-            ledgerEntry.SessionId,
-            ledgerEntry.Type,
-            ledgerEntry.AvailableDelta,
-            ledgerEntry.HeldDelta,
-            ledgerEntry.CreatedAtUtc,
-            ledgerEntry.Description);
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var wallet = await _walletLockService.AcquireWalletLockAsync(userId, cancellationToken);
 
-        return Result.Success(dto);
+            // Double-check under lock in case key was committed by an immediately preceding caller
+            if (!string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                var existingUnderLock = await _context.CreditTransactions
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(ct => ct.IdempotencyKey == idempotencyKey, cancellationToken);
+
+                if (existingUnderLock != null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return ValidateAndMapExistingBonus(existingUnderLock, userId, minutes, description);
+                }
+            }
+
+            wallet.AvailableMinutes += minutes;
+            wallet.UpdatedAtUtc = _dateTimeProvider.UtcNow;
+
+            var ledgerEntry = new CreditTransaction
+            {
+                WalletId = userId,
+                SessionId = null,
+                Type = CreditTransactionType.Bonus,
+                AvailableDelta = minutes,
+                HeldDelta = 0,
+                CreatedAtUtc = _dateTimeProvider.UtcNow,
+                Description = description,
+                IdempotencyKey = idempotencyKey
+            };
+
+            _context.CreditTransactions.Add(ledgerEntry);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Result.Success(MapToDto(ledgerEntry));
+        }
+        catch (DbUpdateException ex) when (!string.IsNullOrWhiteSpace(idempotencyKey) && IsIdempotencyKeyUniqueViolation(ex))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            (_context as DbContext)?.ChangeTracker.Clear();
+
+            // Re-read winning ledger record safely after rollback
+            var winning = await _context.CreditTransactions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ct => ct.IdempotencyKey == idempotencyKey, cancellationToken);
+
+            if (winning != null)
+            {
+                return ValidateAndMapExistingBonus(winning, userId, minutes, description);
+            }
+
+            throw;
+        }
+    }
+
+    private static Result<CreditTransactionDto> ValidateAndMapExistingBonus(
+        CreditTransaction existing,
+        Guid userId,
+        int minutes,
+        string description)
+    {
+        if (existing.WalletId == userId &&
+            existing.AvailableDelta == minutes &&
+            existing.Description == description &&
+            existing.Type == CreditTransactionType.Bonus)
+        {
+            return Result.Success(MapToDto(existing));
+        }
+
+        return Result.Failure<CreditTransactionDto>(
+            $"Idempotency key conflict: The key '{existing.IdempotencyKey}' has already been used for a different bonus grant.");
+    }
+
+    private static CreditTransactionDto MapToDto(CreditTransaction t) =>
+        new(t.Id, t.WalletId, t.SessionId, t.Type, t.AvailableDelta, t.HeldDelta, t.CreatedAtUtc, t.Description);
+
+    private static bool IsIdempotencyKeyUniqueViolation(DbUpdateException ex)
+    {
+        Exception? current = ex;
+        while (current != null)
+        {
+            var message = current.Message;
+            if (current.GetType().Name == "SqlException")
+            {
+                if (message.Contains("2601") || message.Contains("2627") ||
+                    message.Contains("UX_CreditTransaction_IdempotencyKey", StringComparison.OrdinalIgnoreCase))
+                {
+                    return message.Contains("UX_CreditTransaction_IdempotencyKey", StringComparison.OrdinalIgnoreCase)
+                        || message.Contains("IdempotencyKey", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            if (message.Contains("UX_CreditTransaction_IdempotencyKey", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            current = current.InnerException;
+        }
+
+        return false;
     }
 
     public async Task<Result<CreditTransactionDto>> ApplyAdjustmentAsync(Guid userId, int availableDelta, int heldDelta, string description, CancellationToken cancellationToken = default)

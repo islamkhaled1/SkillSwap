@@ -1,0 +1,1712 @@
+{
+  "info": {
+    "_postman_id": "c1f7a28e-59b4-4b47-9dc4-839e99a8d11c",
+    "name": "SkillSwap API",
+    "description": "Comprehensive Postman collection for the SkillSwap Backend REST API.\nCovers the complete user journey, authentication, profile management, skill catalog & user declarations, weekly availability, match recommendations, swap requests, SignalR/REST chat, session scheduling & escrow lifecycle, wallet balances & transactions, subscriptions, reviews, notifications, platform moderation, and administrative operations.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5284",
+      "type": "string"
+    },
+    {
+      "key": "learnerEmail",
+      "value": "learner@skillswap.test",
+      "type": "string"
+    },
+    {
+      "key": "teacherEmail",
+      "value": "teacher@skillswap.test",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@skillswap.test",
+      "type": "string"
+    },
+    {
+      "key": "userPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "learnerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teacherToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "learnerUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teacherUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "skillId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "userSkillId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "swapRequestId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "conversationId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health Checks",
+      "item": [
+        {
+          "name": "Liveness Probe (/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "ASP.NET Core health check middleware probe."
+          }
+        },
+        {
+          "name": "API Health Controller (/api/health)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Returns status, UTC timestamp, and API version."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication",
+      "item": [
+        {
+          "name": "Register Teacher",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('teacherToken', json.accessToken);",
+                  "    pm.collectionVariables.set('teacherUserId', json.userId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Teacher Alice\",\n  \"email\": \"{{teacherEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Registers a new user, automatically creating their profile, wallet (0 balance), and default Free subscription."
+          }
+        },
+        {
+          "name": "Register Learner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('learnerToken', json.accessToken);",
+                  "    pm.collectionVariables.set('learnerUserId', json.userId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Learner Bob\",\n  \"email\": \"{{learnerEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Registers a new learner user."
+          }
+        },
+        {
+          "name": "Login Teacher",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('teacherToken', json.accessToken);",
+                  "    pm.collectionVariables.set('teacherUserId', json.userId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{teacherEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Logs in and retrieves a JWT access token for the teacher."
+          }
+        },
+        {
+          "name": "Login Learner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('learnerToken', json.accessToken);",
+                  "    pm.collectionVariables.set('learnerUserId', json.userId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{learnerEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Logs in and retrieves a JWT access token for the learner."
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('adminToken', json.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Logs in an administrator (configured via AdminUser:Email and AdminUser:Password) to retrieve an admin JWT token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. User Profiles",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profiles/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profiles", "me"]
+            },
+            "description": "Retrieves the authenticated user's profile details."
+          }
+        },
+        {
+          "name": "Update Current User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Alice - Senior .NET Mentor\",\n  \"bio\": \"Passionate software engineer ready to swap knowledge in C#, ASP.NET, and Clean Architecture.\",\n  \"photoUrl\": \"https://example.com/alice.jpg\",\n  \"timeZoneId\": \"UTC\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/profiles/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profiles", "me"]
+            },
+            "description": "Updates profile details for the authenticated user."
+          }
+        },
+        {
+          "name": "Get Public Profile by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profiles/{{teacherUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profiles", "{{teacherUserId}}"]
+            },
+            "description": "Retrieves the public profile of another user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Skills Catalog & User Declarations",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            },
+            "description": "Public catalog: retrieves all active categories."
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories", "1"]
+            },
+            "description": "Retrieves category metadata by ID."
+          }
+        },
+        {
+          "name": "Get All Skills",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var skills = pm.response.json();",
+                  "    if (skills.length > 0) {",
+                  "        pm.collectionVariables.set('skillId', skills[0].id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/skills",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "skills"]
+            },
+            "description": "Public catalog: retrieves all active skills."
+          }
+        },
+        {
+          "name": "Get Skill by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/skills/{{skillId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "skills", "{{skillId}}"]
+            },
+            "description": "Retrieves skill details by ID."
+          }
+        },
+        {
+          "name": "Teacher Declares Teach Skill",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('userSkillId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skillId\": {{skillId}},\n  \"type\": 1,\n  \"level\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/skills",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "skills"]
+            },
+            "description": "Declares a skill offered to teach (Type 1 = Teach, Level 3 = Advanced)."
+          }
+        },
+        {
+          "name": "Learner Declares Learn Skill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skillId\": {{skillId}},\n  \"type\": 2,\n  \"level\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/skills",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "skills"]
+            },
+            "description": "Declares a skill desired to learn (Type 2 = Learn, Level 1 = Beginner)."
+          }
+        },
+        {
+          "name": "Get My Declared Skills",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/skills",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "skills"]
+            },
+            "description": "Lists all declared skills (teach and learn) for the authenticated user."
+          }
+        },
+        {
+          "name": "Update User Skill Level",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/skills/{{userSkillId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "skills", "{{userSkillId}}"]
+            },
+            "description": "Updates the proficiency level (1=Beginner, 2=Intermediate, 3=Advanced) of a declared user skill."
+          }
+        },
+        {
+          "name": "Delete User Skill",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/skills/{{userSkillId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "skills", "{{userSkillId}}"]
+            },
+            "description": "Removes a declared skill from the user's profile."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Availability Schedule",
+      "item": [
+        {
+          "name": "Set Teacher Availability Schedule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slots\": [\n    {\n      \"dayOfWeek\": 1,\n      \"startTime\": \"09:00:00\",\n      \"endTime\": \"17:00:00\"\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"startTime\": \"10:00:00\",\n      \"endTime\": \"18:00:00\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/availability",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "availability"]
+            },
+            "description": "Replaces the weekly recurring availability schedule for the teacher."
+          }
+        },
+        {
+          "name": "Get My Availability Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/availability",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "availability"]
+            },
+            "description": "Retrieves the weekly recurring availability schedule for the current user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Matching Engine",
+      "item": [
+        {
+          "name": "Get Match Recommendations for Learner",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/matches?skillId={{skillId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "matches"],
+              "query": [
+                {
+                  "key": "skillId",
+                  "value": "{{skillId}}"
+                }
+              ]
+            },
+            "description": "Calculates peer match recommendations based on complementary skills, availability overlap, and ratings."
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Swap Requests",
+      "item": [
+        {
+          "name": "Create Swap Request (Learner -> Teacher)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('swapRequestId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiverId\": \"{{teacherUserId}}\",\n  \"skillId\": {{skillId}},\n  \"message\": \"Hi Alice! I'd love to learn C# and ASP.NET Core from you.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests"]
+            },
+            "description": "Creates a swap request proposing an exchange."
+          }
+        },
+        {
+          "name": "Get Incoming Swap Requests (Teacher)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests/incoming",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests", "incoming"]
+            },
+            "description": "Lists swap requests where the caller is the recipient."
+          }
+        },
+        {
+          "name": "Get Outgoing Swap Requests (Learner)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests/outgoing",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests", "outgoing"]
+            },
+            "description": "Lists swap requests where the caller is the requester."
+          }
+        },
+        {
+          "name": "Get Swap Request Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests/{{swapRequestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests", "{{swapRequestId}}"]
+            },
+            "description": "Retrieves details of a swap request by ID."
+          }
+        },
+        {
+          "name": "Accept Swap Request (Teacher)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests/{{swapRequestId}}/accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests", "{{swapRequestId}}", "accept"]
+            },
+            "description": "Teacher accepts the swap request, automatically creating a Conversation."
+          }
+        },
+        {
+          "name": "Decline Swap Request (Teacher)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests/{{swapRequestId}}/decline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests", "{{swapRequestId}}", "decline"]
+            },
+            "description": "Teacher declines a pending swap request."
+          }
+        },
+        {
+          "name": "Cancel Swap Request (Learner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/swap-requests/{{swapRequestId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "swap-requests", "{{swapRequestId}}", "cancel"]
+            },
+            "description": "Learner cancels their pending swap request."
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Conversations & Messages",
+      "item": [
+        {
+          "name": "Get My Conversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var convs = pm.response.json();",
+                  "    if (convs.length > 0) {",
+                  "        pm.collectionVariables.set('conversationId', convs[0].id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "conversations"]
+            },
+            "description": "Lists all conversations the user is participating in."
+          }
+        },
+        {
+          "name": "Get Conversation by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/conversations/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "conversations", "{{conversationId}}"]
+            },
+            "description": "Retrieves conversation metadata."
+          }
+        },
+        {
+          "name": "Send Message (Learner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Hi Alice, looking forward to our session!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/conversations/{{conversationId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "conversations", "{{conversationId}}", "messages"]
+            },
+            "description": "Sends a message in the conversation via REST API (also broadcasts over SignalR ChatHub)."
+          }
+        },
+        {
+          "name": "Get Conversation Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/conversations/{{conversationId}}/messages?page=1&pageSize=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "conversations", "{{conversationId}}", "messages"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Retrieves paginated chat history for the conversation."
+          }
+        },
+        {
+          "name": "Mark Conversation as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lastReadMessageId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/conversations/{{conversationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "conversations", "{{conversationId}}", "read"]
+            },
+            "description": "Advances the participant's read receipt cursor."
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Sessions & Escrow Lifecycle",
+      "item": [
+        {
+          "name": "Book Session (Learner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('sessionId', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"swapRequestId\": {{swapRequestId}},\n  \"startUtc\": \"2026-10-15T14:00:00Z\",\n  \"durationMinutes\": 60,\n  \"mode\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/book",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "book"]
+            },
+            "description": "Books a session: verifies monthly quota, places durationMinutes in escrow hold from learner wallet."
+          }
+        },
+        {
+          "name": "Get Session by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}"]
+            },
+            "description": "Retrieves session details and status."
+          }
+        },
+        {
+          "name": "Get My Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions"]
+            },
+            "description": "Lists sessions for the authenticated user."
+          }
+        },
+        {
+          "name": "Confirm Session (Teacher)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "confirm"]
+            },
+            "description": "Teacher confirms the booked session."
+          }
+        },
+        {
+          "name": "Join Session (Participant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/join",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "join"]
+            },
+            "description": "Marks participant as joined."
+          }
+        },
+        {
+          "name": "Complete Session (Teacher or Learner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "complete"]
+            },
+            "description": "Finalizes the session: releases escrow hold and transfers earned minutes to teacher wallet atomically. Rejects unauthorized third parties with 403 Forbidden."
+          }
+        },
+        {
+          "name": "Cancel Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Schedule conflict\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "cancel"]
+            },
+            "description": "Cancels session and releases held escrow back to learner."
+          }
+        },
+        {
+          "name": "Mark No-Show",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"party\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/no-show",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "no-show"]
+            },
+            "description": "Reports no-show (Party 1 = Learner, Party 2 = Teacher)."
+          }
+        },
+        {
+          "name": "Dispute Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Session did not cover agreed topic\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sessions/{{sessionId}}/dispute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sessions", "{{sessionId}}", "dispute"]
+            },
+            "description": "Puts session in Disputed status pending administrator resolution."
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Wallets & Credit Ledger",
+      "item": [
+        {
+          "name": "Get My Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallets/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wallets", "me"]
+            },
+            "description": "Returns AvailableMinutes and HeldMinutes for the authenticated user."
+          }
+        },
+        {
+          "name": "Get My Credit Ledger Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallets/me/transactions?count=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wallets", "me", "transactions"],
+              "query": [
+                {
+                  "key": "count",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Lists chronological ledger transactions (AvailableDelta, HeldDelta, Description, CreatedAtUtc). Idempotency keys are kept internal and not exposed in public DTOs."
+          }
+        },
+        {
+          "name": "Get My Monthly Quota",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallets/me/quota",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wallets", "me", "quota"]
+            },
+            "description": "Returns current monthly learning minutes limit and used minutes based on subscription tier."
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Subscriptions",
+      "item": [
+        {
+          "name": "Get Subscription Plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", "plans"]
+            },
+            "description": "Lists active subscription tiers (Free, Premium, Unlimited)."
+          }
+        },
+        {
+          "name": "Get My Current Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", "me"]
+            },
+            "description": "Retrieves the user's active tier and remaining quota."
+          }
+        },
+        {
+          "name": "Subscribe to Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/subscriptions/subscribe",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "subscriptions", "subscribe"]
+            },
+            "description": "Upgrades/changes user subscription tier."
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Reviews & Ratings",
+      "item": [
+        {
+          "name": "Submit Session Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": {{sessionId}},\n  \"rating\": 5,\n  \"comment\": \"Outstanding mentor! Clear explanations and great practical examples.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reviews"]
+            },
+            "description": "Submits feedback review and 1-5 star rating for a completed session."
+          }
+        },
+        {
+          "name": "Get Public User Reviews Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{teacherUserId}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{teacherUserId}}", "reviews"]
+            },
+            "description": "Retrieves average rating and public reviews received by a user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. In-App Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?unreadOnly=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications"],
+              "query": [
+                {
+                  "key": "unreadOnly",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Lists in-app notifications for the user."
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/1/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "1", "read"]
+            },
+            "description": "Marks an in-app notification as read."
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Badges, Favorites, Blocks & Reports",
+      "item": [
+        {
+          "name": "Get Badges Catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/badges",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "badges"]
+            },
+            "description": "Lists all available badges in the system (empty by default on fresh databases)."
+          }
+        },
+        {
+          "name": "Get User Awarded Badges",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{teacherUserId}}/badges",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{teacherUserId}}", "badges"]
+            },
+            "description": "Retrieves badges awarded to a user."
+          }
+        },
+        {
+          "name": "Get Favorites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "favorites"]
+            },
+            "description": "Lists bookmarked favorite users."
+          }
+        },
+        {
+          "name": "Add Favorite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites/{{teacherUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "favorites", "{{teacherUserId}}"]
+            },
+            "description": "Adds a user to favorites."
+          }
+        },
+        {
+          "name": "Remove Favorite",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites/{{teacherUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "favorites", "{{teacherUserId}}"]
+            },
+            "description": "Removes a user from favorites."
+          }
+        },
+        {
+          "name": "Get Blocked Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/blocks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "blocks"]
+            },
+            "description": "Lists users blocked by the caller."
+          }
+        },
+        {
+          "name": "Block User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/blocks/{{teacherUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "blocks", "{{teacherUserId}}"]
+            },
+            "description": "Blocks a user from swap requests, matching, and messaging."
+          }
+        },
+        {
+          "name": "Unblock User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/blocks/{{teacherUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "blocks", "{{teacherUserId}}"]
+            },
+            "description": "Unblocks a user."
+          }
+        },
+        {
+          "name": "Submit Moderation Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{learnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportedUserId\": \"{{teacherUserId}}\",\n  \"reason\": 1,\n  \"description\": \"User was unprofessional and breached community code of conduct.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/reports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports"]
+            },
+            "description": "Submits a moderation report against a user (Reason: 1=Harassment, 2=InappropriateContent, 3=Spam, 4=NoShow, 5=Fraud, 6=Other)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Administrative Operations",
+      "item": [
+        {
+          "name": "Admin: Grant Bonus Minutes (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "welcome-bonus-12345"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minutes\": 60,\n  \"description\": \"Administrative onboarding credit bonus\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/wallets/{{learnerUserId}}/bonus",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "wallets", "{{learnerUserId}}", "bonus"]
+            },
+            "description": "Admin endpoint: grants initial or promotional learning minutes to a user's wallet with guaranteed idempotency via Idempotency-Key header. Replays return the existing transaction without double-crediting. Payloads with conflicting keys return 409 Conflict."
+          }
+        },
+        {
+          "name": "Admin: Create Skill Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cloud & DevOps\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            },
+            "description": "Admin endpoint: creates a new catalog category."
+          }
+        },
+        {
+          "name": "Admin: Create Catalog Skill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": 1,\n  \"name\": \"Kubernetes Administration\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/skills",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "skills"]
+            },
+            "description": "Admin endpoint: creates a new catalog skill under a category."
+          }
+        },
+        {
+          "name": "Admin: Resolve Disputed Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"awardTeacher\": false,\n  \"resolutionNote\": \"Full refund issued to learner after investigation.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sessions/{{sessionId}}/resolve-dispute",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "sessions", "{{sessionId}}", "resolve-dispute"]
+            },
+            "description": "Admin endpoint: resolves a disputed session, releasing escrow to teacher or refunding held minutes back to learner."
+          }
+        },
+        {
+          "name": "Admin: List Moderation Reports",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports?status=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Admin endpoint: lists submitted moderation reports."
+          }
+        },
+        {
+          "name": "Admin: Update Moderation Report Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/1/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "1", "status"]
+            },
+            "description": "Admin endpoint: updates the resolution status of a report (Status: 0 = Pending, 1 = UnderReview, 2 = Resolved, 3 = Dismissed)."
+          }
+        }
+      ]
+    }
+  ]
+}

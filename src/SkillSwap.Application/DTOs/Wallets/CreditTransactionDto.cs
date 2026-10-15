@@ -1,4 +1,4 @@
-﻿using SkillSwap.Domain.Enums;
+using SkillSwap.Domain.Enums;
 
 namespace SkillSwap.Application.DTOs.Wallets;
 

@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SkillSwap.Application.Abstractions;
@@ -126,6 +127,33 @@ public class SessionCompletionService : ISessionCompletionService
             });
         }
 
+        _context.Notifications.AddRange(
+            new Notification
+            {
+                UserId = session.LearnerId,
+                Type = NotificationKind.SessionCompleted,
+                Payload = JsonSerializer.Serialize(new
+                {
+                    SessionId = sessionId,
+                    Message = $"Session #{sessionId} has been completed. You can now leave a review!"
+                }),
+                IsRead = false,
+                CreatedAtUtc = _dateTimeProvider.UtcNow
+            },
+            new Notification
+            {
+                UserId = session.TeacherId,
+                Type = NotificationKind.SessionCompleted,
+                Payload = JsonSerializer.Serialize(new
+                {
+                    SessionId = sessionId,
+                    Message = $"Session #{sessionId} has been completed. You can now leave a review!"
+                }),
+                IsRead = false,
+                CreatedAtUtc = _dateTimeProvider.UtcNow
+            }
+        );
+
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -140,6 +168,7 @@ public class SessionCompletionService : ISessionCompletionService
         var eligibleSessionIds = await _context.Sessions
             .AsNoTracking()
             .Where(s => s.Status == SessionStatus.Scheduled && s.EndUtc <= graceThreshold)
+            .OrderBy(s => s.EndUtc)
             .Select(s => s.Id)
             .Take(50)
             .ToListAsync(cancellationToken);
@@ -173,6 +202,7 @@ public class SessionCompletionService : ISessionCompletionService
         var pendingSessions = await _context.Sessions
             .AsNoTracking()
             .Where(s => s.Status == SessionStatus.PendingConfirmation && (s.CreatedAtUtc <= creationThreshold || s.StartUtc <= now))
+            .OrderBy(s => s.CreatedAtUtc)
             .Select(s => new { s.Id, s.LearnerId, s.DurationMinutes })
             .Take(50)
             .ToListAsync(cancellationToken);
