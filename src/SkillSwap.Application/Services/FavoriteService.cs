@@ -6,18 +6,20 @@ using SkillSwap.Domain.Entities;
 
 namespace SkillSwap.Application.Services;
 
-public class FavoriteService : IFavoriteService
+public sealed class FavoriteService : IFavoriteService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
 
-    public FavoriteService(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public FavoriteService(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Result<IReadOnlyList<FavoriteDto>>> GetFavoritesAsync(
+    public async Task<Result<IReadOnlyList<FavoriteUserDto>>> GetFavoritesAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -25,54 +27,90 @@ public class FavoriteService : IFavoriteService
             .AsNoTracking()
             .Where(f => f.UserId == userId)
             .OrderByDescending(f => f.CreatedAtUtc)
-            .Select(f => new FavoriteDto(f.UserId, f.FavoriteUserId, f.CreatedAtUtc))
             .ToListAsync(cancellationToken);
 
-        return Result.Success<IReadOnlyList<FavoriteDto>>(favorites);
+        var targetUserIds = favorites.Select(f => f.FavoriteUserId).ToList();
+
+        var profiles = await _context.UserProfiles
+            .AsNoTracking()
+            .Where(p => targetUserIds.Contains(p.UserId))
+            .ToDictionaryAsync(p => p.UserId, cancellationToken);
+
+        var result = favorites.Select(f =>
+        {
+            profiles.TryGetValue(f.FavoriteUserId, out var profile);
+            return new FavoriteUserDto
+            {
+                UserId = f.FavoriteUserId,
+                DisplayName = profile?.DisplayName ?? $"User {f.FavoriteUserId.ToString()[..8]}",
+                PhotoUrl = profile?.PhotoUrl,
+                Bio = profile?.Bio,
+                AddedAtUtc = f.CreatedAtUtc
+            };
+        }).ToList();
+
+        return Result.Success<IReadOnlyList<FavoriteUserDto>>(result);
     }
 
-    public async Task<Result<FavoriteDto>> AddFavoriteAsync(
+    public async Task<Result<FavoriteUserDto>> AddFavoriteAsync(
         Guid userId,
-        Guid favoriteUserId,
+        Guid targetUserId,
         CancellationToken cancellationToken = default)
     {
-        if (userId == favoriteUserId)
+        if (userId == targetUserId)
         {
-            return Result.Failure<FavoriteDto>("Cannot favorite yourself.");
+            return Result.Failure<FavoriteUserDto>("You cannot add yourself to favorites.");
+        }
+
+        var targetProfile = await _context.UserProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == targetUserId, cancellationToken);
+
+        if (targetProfile == null)
+        {
+            return Result.Failure<FavoriteUserDto>($"User with ID {targetUserId} was not found.");
         }
 
         var existing = await _context.Favorites
-            .FirstOrDefaultAsync(f => f.UserId == userId && f.FavoriteUserId == favoriteUserId, cancellationToken);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.UserId == userId && f.FavoriteUserId == targetUserId, cancellationToken);
 
         if (existing != null)
         {
-            return Result.Success(new FavoriteDto(existing.UserId, existing.FavoriteUserId, existing.CreatedAtUtc));
+            return Result.Failure<FavoriteUserDto>("User is already in your favorites list.");
         }
 
         var favorite = new Favorite
         {
             UserId = userId,
-            FavoriteUserId = favoriteUserId,
+            FavoriteUserId = targetUserId,
             CreatedAtUtc = _dateTimeProvider.UtcNow
         };
 
         _context.Favorites.Add(favorite);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new FavoriteDto(favorite.UserId, favorite.FavoriteUserId, favorite.CreatedAtUtc));
+        return Result.Success(new FavoriteUserDto
+        {
+            UserId = targetUserId,
+            DisplayName = targetProfile.DisplayName,
+            PhotoUrl = targetProfile.PhotoUrl,
+            Bio = targetProfile.Bio,
+            AddedAtUtc = favorite.CreatedAtUtc
+        });
     }
 
     public async Task<Result> RemoveFavoriteAsync(
         Guid userId,
-        Guid favoriteUserId,
+        Guid targetUserId,
         CancellationToken cancellationToken = default)
     {
         var favorite = await _context.Favorites
-            .FirstOrDefaultAsync(f => f.UserId == userId && f.FavoriteUserId == favoriteUserId, cancellationToken);
+            .FirstOrDefaultAsync(f => f.UserId == userId && f.FavoriteUserId == targetUserId, cancellationToken);
 
         if (favorite == null)
         {
-            return Result.Failure("Favorite not found.");
+            return Result.Failure("Favorite record was not found.");
         }
 
         _context.Favorites.Remove(favorite);

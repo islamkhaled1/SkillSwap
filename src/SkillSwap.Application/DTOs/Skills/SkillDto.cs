@@ -1,12 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+namespace SkillSwap.Application.DTOs.Skills;
 
-namespace SkillSwap.Application.DTOs.Skills
+public sealed class SkillDto
 {
-    public sealed record SkillDto(
-     int Id,
-     string Name,
-     int CategoryId,
-     string CategoryName);
+    public int Id { get; init; }
+    public int CategoryId { get; init; }
+    public string CategoryName { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public bool IsActive { get; init; }
+    public DateTime CreatedAtUtc { get; init; }
 }

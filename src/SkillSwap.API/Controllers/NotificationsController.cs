@@ -23,44 +23,60 @@ public class NotificationsController : ControllerBase
         _currentUserService = currentUserService;
     }
 
+    /// <summary>
+    /// Retrieves all in-app notifications for the authenticated user.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<NotificationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetNotifications(
-        [FromQuery] bool unreadOnly,
-        CancellationToken cancellationToken)
+        [FromQuery] bool unreadOnly = false,
+        CancellationToken cancellationToken = default)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _notificationService.GetNotificationsAsync(callerId, unreadOnly, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _notificationService.GetUserNotificationsAsync(currentUserId.Value, unreadOnly, cancellationToken);
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Marks an in-app notification as read for the authenticated user.
+    /// </summary>
     [HttpPost("{id:long}/read")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> MarkAsRead(long id, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkAsRead(
+        long id,
+        CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _notificationService.MarkAsReadAsync(callerId, id, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
+        var result = await _notificationService.MarkAsReadAsync(currentUserId.Value, id, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error == "Notification not found.")
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
                 return NotFound(result.Error);
+            }
+
+            if (result.Error?.Contains("not authorized", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Forbid();
+            }
 
             return BadRequest(result.Error);
         }
 
-        return Ok();
-    }
-
-    private Guid GetCurrentUserId()
-    {
-        if (_currentUserService.UserId == null)
-            throw new UnauthorizedAccessException("User is not authenticated.");
-
-        return _currentUserService.UserId.Value;
+        return NoContent();
     }
 }

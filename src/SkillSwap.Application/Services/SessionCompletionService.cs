@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -125,6 +126,33 @@ public class SessionCompletionService : ISessionCompletionService
                 Description = $"Earned from completed session #{sessionId}"
             });
         }
+
+        _context.Notifications.AddRange(
+            new Notification
+            {
+                UserId = session.LearnerId,
+                Type = NotificationKind.SessionCompleted,
+                Payload = JsonSerializer.Serialize(new
+                {
+                    SessionId = sessionId,
+                    Message = $"Session #{sessionId} has been completed. You can now leave a review!"
+                }),
+                IsRead = false,
+                CreatedAtUtc = _dateTimeProvider.UtcNow
+            },
+            new Notification
+            {
+                UserId = session.TeacherId,
+                Type = NotificationKind.SessionCompleted,
+                Payload = JsonSerializer.Serialize(new
+                {
+                    SessionId = sessionId,
+                    Message = $"Session #{sessionId} has been completed. You can now leave a review!"
+                }),
+                IsRead = false,
+                CreatedAtUtc = _dateTimeProvider.UtcNow
+            }
+        );
 
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

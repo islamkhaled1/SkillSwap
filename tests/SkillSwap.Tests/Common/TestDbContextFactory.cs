@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SkillSwap.Infrastructure.Persistence;
 
 namespace SkillSwap.Tests.Common;
@@ -14,14 +14,10 @@ public static class TestDbContextFactory
         return new ApplicationDbContext(options);
     }
 
-    public static ApplicationDbContext CreateSqlServerContext(string? connectionString = null)
+    public static ApplicationDbContext CreateSqlServerContext(string connectionString = "Server=localhost;Database=SkillSwap_IntegrationTestDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;")
     {
-        var resolvedConnStr = connectionString
-            ?? Environment.GetEnvironmentVariable("TEST_CONNECTION_STRING")
-            ?? "Server=.\\SQLEXPRESS;Database=SkillSwap_IntegrationTestDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
-
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlServer(resolvedConnStr)
+            .UseSqlServer(connectionString)
             .Options;
 
         return new ApplicationDbContext(options);

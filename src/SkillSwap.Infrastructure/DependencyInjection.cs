@@ -8,7 +8,6 @@ using SkillSwap.Application.Services;
 using SkillSwap.Infrastructure.BackgroundJobs;
 using SkillSwap.Infrastructure.Identity;
 using SkillSwap.Infrastructure.Persistence;
-using SkillSwap.Infrastructure.Repositories;
 using SkillSwap.Infrastructure.Services;
 
 namespace SkillSwap.Infrastructure;
@@ -61,6 +60,21 @@ public static class DependencyInjection
         // ── Options Configuration ───────────────────────────────────────────
         services.Configure<JwtSettings>(
             configuration.GetSection(JwtSettings.SectionName));
+        services.PostConfigure<JwtSettings>(options =>
+        {
+            if (string.IsNullOrWhiteSpace(options.SigningKey))
+            {
+                var fallbackKey = configuration["Jwt:Key"]
+                    ?? configuration["Jwt__Key"]
+                    ?? configuration["Jwt:SecretKey"]
+                    ?? configuration["Jwt__SecretKey"];
+
+                if (!string.IsNullOrWhiteSpace(fallbackKey))
+                {
+                    options.Key = fallbackKey;
+                }
+            }
+        });
 
         services.Configure<SessionPolicyOptions>(
             configuration.GetSection(SessionPolicyOptions.SectionName));
@@ -71,14 +85,22 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IAuthService, AuthService>();
-
-
-        services.AddScoped<ICategoryRepository, CategoryRepository>();
-        services.AddScoped<ISkillRepository, SkillRepository>();
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
-
+        services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ISkillService, SkillService>();
+        services.AddScoped<IAvailabilityService, AvailabilityService>();
+        services.AddScoped<IMatchingService, MatchingService>();
+        services.AddScoped<ISwapRequestService, SwapRequestService>();
+        services.AddScoped<IChatService, ChatService>();
+
+        // ── Platform Features (Phase 7) ─────────────────────────────────────
+        services.AddScoped<IReviewService, ReviewService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IBadgeService, BadgeService>();
+        services.AddScoped<IFavoriteService, FavoriteService>();
+        services.AddScoped<IBlockService, BlockService>();
+        services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<ISubscriptionService, SubscriptionService>();
 
         // ── Locking, Wallet, Quota, Booking & Session Engine ────────────────
         services.AddScoped<IWalletLockService, SqlWalletLockService>();
@@ -90,17 +112,8 @@ public static class DependencyInjection
         services.AddScoped<ISessionCompletionService, SessionCompletionService>();
         services.AddScoped<ILedgerReconciliationService, LedgerReconciliationService>();
 
-        // ── Platform Features (Member 5) ────────────────────────────────────
-        services.AddScoped<IReviewService, ReviewService>();
-        services.AddScoped<INotificationService, NotificationService>();
-        services.AddScoped<IBadgeService, BadgeService>();
-        services.AddScoped<IFavoriteService, FavoriteService>();
-        services.AddScoped<IBlockService, BlockService>();
-        services.AddScoped<IReportService, ReportService>();
-        services.AddScoped<ISubscriptionService, SubscriptionService>();
-        services.AddScoped<IConversationService, ConversationService>();
-
         // ── Background Jobs ─────────────────────────────────────────────────
+        services.AddHostedService<IdentityRoleSeederHostedService>();
         services.AddHostedService<SessionAutoCompletionBackgroundService>();
         services.AddHostedService<PendingSessionExpirationBackgroundService>();
 

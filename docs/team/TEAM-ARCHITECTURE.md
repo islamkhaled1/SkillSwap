@@ -1,6 +1,6 @@
-# SkillSwap Backend -- Team Architecture Specification
+﻿# SkillSwap Backend — Team Architecture Specification
 
-This document serves as the master architectural blueprint and technical contract for the SkillSwap backend. All 5 developers must design and implement code according to the boundaries, matrices, and invariants defined herein.
+This document serves as the master architectural blueprint and technical contract for the SkillSwap backend. All four developers must design and implement code according to the boundaries, matrices, and invariants defined herein.
 
 ---
 
@@ -59,138 +59,123 @@ The solution strictly enforces Clean Architecture dependency boundaries with pre
                            | references
                            v
 +--------------------------------------------------------+
-|               SkillSwap.Application                    |
-|   (Use Cases, Services, DTOs, Abstractions)            |
+|              SkillSwap.Application                     |
+|   (Use Cases, DTOs, Service Interfaces, Results)       |
 +--------------------------+-----------------------------+
                            | references
                            v
 +--------------------------------------------------------+
-|                  SkillSwap.Domain                      |
-|   (Entities, Value Objects, Enums, Exceptions)         |
+|                 SkillSwap.Domain                       |
+|   (Entities, Enums, Exceptions, Domain Rules)          |
 +--------------------------------------------------------+
 ```
 
-### Layer Responsibilities & Strict Rules
-
-1. **`SkillSwap.Domain`** (`src/SkillSwap.Domain`):
-   - Contains core domain models, enterprise entities, value objects, domain enums, and domain exceptions.
-   - **Zero external dependencies**: Contains only pure C# constructs. Never reference EF Core, ASP.NET Core, or third-party packages here.
-2. **`SkillSwap.Application`** (`src/SkillSwap.Application`):
-   - Contains application use cases, orchestration services (`SessionBookingService`, `WalletService`, `SessionCompletionService`, etc.), and DTO contracts.
-   - **Owns application contracts and abstractions** (`IApplicationDbContext`, `IWalletService`, `ISessionService`, etc.) implemented by Infrastructure.
-   - **Strict Dependency Rules:**
-     - `SkillSwap.Application` **MUST NOT depend on `SkillSwap.Infrastructure` or `SkillSwap.API`**.
-     - References `SkillSwap.Domain` and framework database abstractions (`Microsoft.EntityFrameworkCore` for `DbSet<T>` abstractions in `IApplicationDbContext` and `Microsoft.Extensions.Options`) without referencing SQL Server, migrations, or persistence implementations.
-3. **`SkillSwap.Infrastructure`** (`src/SkillSwap.Infrastructure`):
-   - Implements persistence (`ApplicationDbContext`, EF Core Configurations), SQL Server migrations and locking, ASP.NET Core Identity integration (`ApplicationUser`), background hosted services, and token generation.
-   - Depends on `SkillSwap.Application` and `SkillSwap.Domain`.
-4. **`SkillSwap.API`** (`src/SkillSwap.API`):
-   - Presentation layer: REST API Controllers (`SessionsController`, `WalletsController`, `AdminSessionsController`, `HealthController`), SignalR `ChatHub`, Global Exception Handling Middleware, and Swagger/OpenAPI extensions.
-   - **Delegates all business behavior to Application services.** Controllers are thin HTTP dispatchers.
-5. **`SkillSwap.Tests`** (`tests/SkillSwap.Tests`):
-   - Contains unit and integration tests verifying domain models, business service contracts, and concurrent SQL Server locking behavior.
+### Dependency Rules:
+1. `SkillSwap.Domain`: Pure C# business domain. Has **zero** project dependencies and zero framework dependencies.
+2. `SkillSwap.Application`: Depends **only** on `SkillSwap.Domain`. Owns all service contracts/abstractions (`IApplicationDbContext`, `IWalletService`, `ISessionService`, `IChatService`, etc.). Must **never** reference `Infrastructure` or `API`.
+3. `SkillSwap.Infrastructure`: Implements abstractions defined in `Application` and `Domain`. References `Domain` and `Application`.
+4. `SkillSwap.API`: Presentation layer. References `Application` and `Infrastructure` (solely for dependency injection wiring in `Program.cs`). Controllers interact strictly through Application interfaces.
+5. `SkillSwap.Tests`: Unit and integration test suites referencing all projects.
 
 ---
 
 ## 3. Project Dependency Map
 
 ```
-SkillSwap.Domain (Core domain models & business concepts -- Standalone)
-       ^
-       |
-SkillSwap.Application (Application contracts, use cases, DTOs -- No Infra or API dependency)
-       ^
-       +---------------------------------+
-       |                                 |
-SkillSwap.Infrastructure (Persistence, SQL Server, Identity, Background Workers)
-       ^                                 |
-       |                                 |
-SkillSwap.API (Presentation layer -- Delegates behavior to Application)
-       ^
-       |
-SkillSwap.Tests (References API, Infrastructure, Application, Domain)
+SkillSwap.sln
+├── src/SkillSwap.Domain/
+├── src/SkillSwap.Application/       --> depends on Domain
+├── src/SkillSwap.Infrastructure/    --> depends on Application, Domain
+├── src/SkillSwap.API/               --> depends on Infrastructure, Application, Domain
+└── tests/SkillSwap.Tests/           --> references API, Infrastructure, Application, Domain
 ```
-
-### Boundary Constraints:
-- `SkillSwap.Domain` contains core domain models and business concepts, and MUST NEVER reference any other project.
-- `SkillSwap.Application` MUST NOT depend on `SkillSwap.Infrastructure` or `SkillSwap.API`.
-- `SkillSwap.Application` owns application contracts/abstractions used by Infrastructure implementations.
-- `SkillSwap.Infrastructure` implements persistence, Identity, SQL Server, background services, and other infrastructure concerns.
-- `SkillSwap.API` is the presentation layer and delegates all business behavior to Application services.
 
 ---
 
 ## 4. Domain Ownership Matrix (22 Entities)
 
-The domain model contains **22 entities**, 12 enums, and 7 specialized domain exceptions. Ownership is partitioned across the 5 backend developers:
+The domain model contains **22 entities**, 12 enums, and 7 specialized domain exceptions. Ownership is partitioned across the **four developers**:
 
 ### Entity Ownership Table
 
 | # | Entity | Primary Key Type | Owning Module | Lead Developer | Primary Table Name |
 |---|---|---|---|---|---|
-| 1 | `ApplicationUser` | `Guid` | Auth & Profile | Member 1 | `Users` |
-| 2 | `UserProfile` | `Guid` | Auth & Profile | Member 1 | `UserProfiles` |
-| 3 | `Category` | `int` | Skills & Matching | Member 2 | `Categories` |
-| 4 | `Skill` | `int` | Skills & Matching | Member 2 | `Skills` |
-| 5 | `UserSkill` | `long` | Skills & Matching | Member 2 | `UserSkills` |
-| 6 | `AvailabilitySlot` | `long` | Skills & Matching | Member 2 | `AvailabilitySlots` |
-| 7 | `SwapRequest` | `long` | Swap & Chat | Member 3 | `SwapRequests` |
-| 8 | `Conversation` | `long` | Swap & Chat | Member 3 | `Conversations` |
-| 9 | `ConversationParticipant` | `(long, Guid)` | Swap & Chat | Member 3 | `ConversationParticipants` |
-| 10 | `Message` | `long` | Swap & Chat | Member 3 | `Messages` |
-| 11 | `Session` | `long` | Session & Wallet | Member 4 | `Sessions` |
-| 12 | `Wallet` | `Guid` | Session & Wallet | Member 4 | `Wallets` |
-| 13 | `CreditTransaction` | `long` | Session & Wallet | Member 4 | `CreditTransactions` |
-| 14 | `Review` | `long` | Platform Features | Member 5 | `Reviews` |
-| 15 | `SubscriptionPlan` | `int` | Platform Features | Member 5 | `SubscriptionPlans` |
-| 16 | `UserSubscription` | `long` | Platform Features | Member 5 | `UserSubscriptions` |
-| 17 | `Notification` | `long` | Platform Features | Member 5 | `Notifications` |
-| 18 | `Badge` | `int` | Platform Features | Member 5 | `Badges` |
-| 19 | `UserBadge` | `(Guid, int)` | Platform Features | Member 5 | `UserBadges` |
-| 20 | `Favorite` | `(Guid, Guid)` | Platform Features | Member 5 | `Favorites` |
-| 21 | `UserBlock` | `(Guid, Guid)` | Platform Features | Member 5 | `UserBlocks` |
-| 22 | `Report` | `long` | Platform Features | Member 5 | `Reports` |
+| 1 | `Session` | `long` | Session & Wallet | Developer 1 | `Sessions` |
+| 2 | `Wallet` | `Guid` | Session & Wallet | Developer 1 | `Wallets` |
+| 3 | `CreditTransaction` | `long` | Session & Wallet | Developer 1 | `CreditTransactions` |
+| 4 | `SwapRequest` | `long` | Swap Lifecycle & Sessions | Developer 1 | `SwapRequests` |
+| 5 | `Conversation` | `long` | Swap Lifecycle & Messaging | Developer 1 | `Conversations` |
+| 6 | `ConversationParticipant` | `(long, Guid)` | Swap Lifecycle & Messaging | Developer 1 | `ConversationParticipants` |
+| 7 | `Message` | `long` | Swap Lifecycle & Messaging | Developer 1 | `Messages` |
+| 8 | `Review` | `long` | Platform Features | Developer 2 | `Reviews` |
+| 9 | `SubscriptionPlan` | `int` | Platform Features | Developer 2 | `SubscriptionPlans` |
+| 10 | `UserSubscription` | `long` | Platform Features | Developer 2 | `UserSubscriptions` |
+| 11 | `Notification` | `long` | Platform Features | Developer 2 | `Notifications` |
+| 12 | `Badge` | `int` | Platform Features | Developer 2 | `Badges` |
+| 13 | `UserBadge` | `(Guid, int)` | Platform Features | Developer 2 | `UserBadges` |
+| 14 | `Favorite` | `(Guid, Guid)` | Platform Features | Developer 2 | `Favorites` |
+| 15 | `UserBlock` | `(Guid, Guid)` | Platform Features | Developer 2 | `UserBlocks` |
+| 16 | `Report` | `long` | Platform Features | Developer 2 | `Reports` |
+| 17 | `Category` | `int` | Skills & Matching | Developer 3 | `Categories` |
+| 18 | `Skill` | `int` | Skills & Matching | Developer 3 | `Skills` |
+| 19 | `UserSkill` | `long` | Skills & Matching | Developer 3 | `UserSkills` |
+| 20 | `AvailabilitySlot` | `long` | Skills & Matching | Developer 3 | `AvailabilitySlots` |
+| 21 | `ApplicationUser` | `Guid` | Auth & Profile | Developer 4 | `Users` |
+| 22 | `UserProfile` | `Guid` | Auth & Profile | Developer 4 | `UserProfiles` |
 
 ### Enum Ownership Table
 
-| Enum | Underlying Type | Values / Meanings | Owning Module |
+| Enum | Underlying Type | Values / Meanings | Owning Developer |
 |---|---|---|---|
-| `CreditTransactionType` | `byte` | Bonus(1), Hold(2), Release(3), Capture(4), Earn(5), Adjustment(6) | Member 4 |
-| `NoShowParty` | `byte` | Learner(1), Teacher(2), Both(3) | Member 4 |
-| `NotificationKind` | `byte` | SwapRequest(1), SessionReminder(2), SessionCompleted(3), SessionCancelled(4), NewMessage(5), ReviewReceived(6), BadgeEarned(7), System(8) | Member 5 |
-| `ReportReason` | `byte` | Harassment(1), InappropriateContent(2), Spam(3), NoShow(4), Fraud(5), Other(6) | Member 5 |
-| `ReportStatus` | `byte` | Open(1), UnderReview(2), Resolved(3), Rejected(4) | Member 5 |
-| `SessionMode` | `byte` | Online(1), InPerson(2) | Member 4 |
-| `SessionStatus` | `byte` | PendingConfirmation(1), Scheduled(2), Completed(3), Cancelled(4), NoShow(5), Disputed(6), Expired(7) | Member 4 |
-| `SubscriptionPlanType` | `int` | Free(1), Premium(2) | Member 5 |
-| `SubscriptionStatus` | `byte` | Active(1), Cancelled(2), Expired(3) | Member 5 |
-| `SwapRequestStatus` | `byte` | Pending(1), Accepted(2), Declined(3), Cancelled(4), Expired(5) | Member 3 |
-| `UserSkillLevel` | `byte` | Beginner(1), Intermediate(2), Advanced(3) | Member 2 |
-| `UserSkillType` | `byte` | Teach(1), Learn(2) [Aliases: Teaching=1, Learning=2] | Member 2 |
+| `CreditTransactionType` | `byte` | Bonus(1), Hold(2), Release(3), Capture(4), Earn(5), Adjustment(6) | Developer 1 |
+| `NoShowParty` | `byte` | Learner(1), Teacher(2), Both(3) | Developer 1 |
+| `SessionMode` | `byte` | Online(1), InPerson(2) | Developer 1 |
+| `SessionStatus` | `byte` | PendingConfirmation(1), Scheduled(2), Completed(3), Cancelled(4), NoShow(5), Disputed(6), Expired(7) | Developer 1 |
+| `SwapRequestStatus` | `byte` | Pending(1), Accepted(2), Declined(3), Cancelled(4), Expired(5) | Developer 1 |
+| `NotificationKind` | `byte` | SwapRequest(1), SessionReminder(2), SessionCompleted(3), SessionCancelled(4), NewMessage(5), ReviewReceived(6), BadgeEarned(7), System(8) | Developer 2 |
+| `ReportReason` | `byte` | Harassment(1), InappropriateContent(2), Spam(3), NoShow(4), Fraud(5), Other(6) | Developer 2 |
+| `ReportStatus` | `byte` | Open(1), UnderReview(2), Resolved(3), Rejected(4) | Developer 2 |
+| `SubscriptionPlanType` | `int` | Free(1), Premium(2) | Developer 2 |
+| `SubscriptionStatus` | `byte` | Active(1), Cancelled(2), Expired(3) | Developer 2 |
+| `UserSkillLevel` | `byte` | Beginner(1), Intermediate(2), Advanced(3) | Developer 3 |
+| `UserSkillType` | `byte` | Teach(1), Learn(2) [Aliases: Teaching=1, Learning=2] | Developer 3 |
 
 ### Domain Exceptions Matrix
 
 All domain exceptions inherit from `DomainException` (`src/SkillSwap.Domain/Exceptions/DomainException.cs`):
-- `InsufficientBalanceException`: Thrown when available minutes are insufficient for hold. (Owner: Member 4)
-- `InvalidSessionStateException`: Thrown on illegal session state transitions. (Owner: Member 4)
+- `InsufficientBalanceException`: Thrown when available minutes are insufficient for hold. (Owner: Developer 1)
+- `InvalidSessionStateException`: Thrown on illegal session state transitions. (Owner: Developer 1)
 - `NotFoundException`: Generic entity not found exception. (Shared)
-- `QuotaExceededException`: Thrown when monthly learning minutes exceed plan cap. (Owner: Member 4)
-- `SessionOverlapException`: Thrown when a participant has a time collision. (Owner: Member 4)
-- `UnauthorizedSessionAccessException`: Thrown when an unauthenticated or unrelated user attempts session operations. (Owner: Member 4)
+- `QuotaExceededException`: Thrown when monthly learning minutes exceed plan cap. (Owner: Developer 1)
+- `SessionOverlapException`: Thrown when a participant has a time collision. (Owner: Developer 1)
+- `UnauthorizedSessionAccessException`: Thrown when an unauthenticated or unrelated user attempts session operations. (Owner: Developer 1)
 
 ---
 
 ## 5. Module Ownership Breakdown
 
-### Module 1: Auth & Profile (Member 1)
-- **Scope:** User registration, password security, login, JWT token issuance, ASP.NET Core Identity integration, user roles, profile management, and current user context.
-- **Invariants:** 
-  - Passwords must comply with enterprise identity rules (min 8 chars, digit, uppercase, lowercase, special char).
-  - Each registered user must have an active `UserProfile` created.
-  - New user registration must initialize a default `Wallet` (via Member 4 contract) and a default `UserSubscription` with the Free plan (via Member 5 contract).
-- **Prohibited:** Must not modify financial engines, wallet ledgers, swap negotiations, or session booking.
+### Module 1: Sessions, Wallet, Swap Lifecycle, Real-Time Chat & Hosting (Developer 1 — Islam Khaled)
+- **Scope:** Core financial engine, wallet balances, escrow hold/capture/release, session booking and lifecycle execution, concurrency control, monthly learning quota enforcement, no-show arbitration, dispute backend, background workers, SwapRequest negotiation lifecycle, SignalR `ChatHub` (`/hubs/chat`), **sole ownership of EF Core migrations**, and **Developer 1 — Production Deployment & Hosting** on MonsterASP.NET.
+- **Invariants:**
+  - Wallet balances (`AvailableMinutes`, `HeldMinutes`) can never be negative.
+  - Escrow bookings, completions, cancellations, and no-shows must update Wallet and CreditTransaction in the same transaction.
+  - Quota is evaluated strictly after deterministic row locks (`UPDLOCK, ROWLOCK`) on wallets ordered by `UserId`.
+  - Double completion is prevented by conditional SQL execution: `UPDATE Sessions SET Status = Completed WHERE Status = Scheduled`.
+  - `SwapRequest.RequesterId = Learner`, `SwapRequest.ReceiverId = Teacher`. Roles are never inverted.
+  - `SwapRequest` never has a `Completed` status.
+  - SignalR group authorization checks participant membership before allowing connection to `conversation_{id}`.
+- **Prohibited:** Must not implement public profile or category CRUD APIs.
 
-### Module 2: Skills, Availability & Matching (Member 2)
+### Module 2: Platform Features & Conversations REST API (Developer 2 — Arwa Khalid)
+- **Scope:** Session reviews and dynamic ratings, notifications (`Notification`), gamification badges (`Badge`, `UserBadge`), user favorites (`Favorite`), user blocking (`UserBlock`), moderation reporting (`Report`), subscription capability tiers (`SubscriptionPlan`, `UserSubscription`), and the **ConversationsController REST API** (`GET /api/conversations`, `GET /api/conversations/{id}`, `GET /api/conversations/{id}/messages`, `POST /api/conversations/{id}/messages`, `POST /api/conversations/{id}/read`).
+- **Invariants:**
+  - Reviews can only be submitted for sessions with `Status = Completed` by actual participants.
+  - Blocked users cannot send swap requests or message each other.
+  - REST messaging dispatches through `IChatService` and triggers SignalR group broadcast.
+  - **Monetization Invariant:** Subscription pricing is unresolved in MVP. `SubscriptionPlan.Price` is `NULL` for Premium, `0.00` for Free. No real payment gateway integration in MVP.
+- **Prohibited:** Must not modify core session booking, wallet balances, or credit ledgers.
+
+### Module 3: Skills, Availability & Matching (Developer 3 — Mario Wael)
 - **Scope:** Category taxonomy, master skill definitions, user skill associations (`UserSkill` with `Type = Teach` or `Type = Learn`), recurring weekly availability slots (`AvailabilitySlot`), skill search, and computed matching algorithm.
 - **Invariants:**
   - `Skill.Name` must be unique per `CategoryId`.
@@ -198,32 +183,13 @@ All domain exceptions inherit from `DomainException` (`src/SkillSwap.Domain/Exce
   - **Matching is strictly computed dynamically**. There is **no persisted Match entity**. Recommendations are generated via query algorithms.
 - **Prohibited:** Must not manage SwapRequest lifecycles, real-time messaging, or session scheduling.
 
-### Module 3: Swap Request & Chat (Member 3)
-- **Scope:** Peer swap request lifecycle (`Pending` -> `Accepted`, `Declined`, `Cancelled`, `Expired`), 1-on-1 conversations (`Conversation`), participants, messages, and real-time chat via SignalR (`ChatHub`).
+### Module 4: Auth & Profile (Developer 4 — Kholoud Khaled)
+- **Scope:** User registration, password security, login, JWT token issuance, ASP.NET Core Identity integration, user roles, profile management, startup key validation, and current user context.
 - **Invariants:**
-  - **Strict Role Contract:** `SwapRequest.RequesterId = Learner`, `SwapRequest.ReceiverId = Teacher`. Never invert these roles.
-  - `SwapRequest.SkillId` is the skill the Requester wants to learn.
-  - The SwapRequest never transitions to `Completed`. It remains `Accepted` and can spawn one or multiple sessions.
-  - Accepting a SwapRequest automatically provisions a `Conversation` between Requester and Receiver.
-- **Prohibited:** Must not touch wallet balances, hold/release escrow, or book sessions.
-
-### Module 4: Session & Wallet -- Financial Lead (Member 4)
-- **Scope:** Core financial engine, wallet balances, escrow hold/capture/release, session booking and lifecycle execution, concurrency control, monthly learning quota enforcement, no-show arbitration, dispute backend, background workers, and **single ownership of database migrations**.
-- **Invariants:**
-  - Wallet balances (`AvailableMinutes`, `HeldMinutes`) can never be negative.
-  - Escrow bookings, completions, cancellations, and no-shows must update Wallet and CreditTransaction in the same transaction.
-  - Quota is evaluated strictly after deterministic row locks (`UPDLOCK, ROWLOCK`) on wallets ordered by `UserId`.
-  - Double completion is prevented by conditional SQL execution: `UPDATE Sessions SET Status = Completed WHERE Status = Scheduled`.
-  - Deletions are forbidden on financial records (`DeleteBehavior.Restrict`).
-- **Prohibited:** Must not implement public profile or category CRUD APIs.
-
-### Module 5: Platform Features (Member 5)
-- **Scope:** Session reviews and dynamic ratings, notifications (`Notification`), gamification badges (`Badge`, `UserBadge`), user favorites (`Favorite`), user blocking (`UserBlock`), moderation reporting (`Report`), and subscription capability tiers (`SubscriptionPlan`, `UserSubscription`).
-- **Invariants:**
-  - Reviews can only be submitted for sessions with `Status = Completed` by actual participants.
-  - Blocked users cannot send swap requests to each other.
-  - **Monetization Invariant:** Subscription pricing is unresolved in MVP. `SubscriptionPlan.Price` is `NULL` for Premium, `0.00` for Free. No real payment gateway integration in MVP.
-- **Prohibited:** Must not modify core session booking, wallet balances, or credit ledgers.
+  - Passwords must comply with enterprise identity rules (min 8 chars, digit, uppercase, lowercase, special char).
+  - Each registered user must have an active `UserProfile` created.
+  - New user registration must initialize a default `Wallet` (via Developer 1 contract) and a default `UserSubscription` with the Free plan (via Developer 2 contract).
+- **Prohibited:** Must not modify financial engines, wallet ledgers, swap negotiations, or session booking.
 
 ---
 
@@ -235,169 +201,130 @@ A critical distinction in this project is the difference between **Ownership** a
 +-------------------------------------------------------------+
 |                        OWNERSHIP                            |
 |             "Who owns this code / module?"                  |
-|  - Assigned to a specific Team Member (Member 1 to 5).      |
+|  - Assigned to a specific Developer (Developer 1 to 4).     |
 |  - Defines code review rights, PR merge approvals, and      |
 |    functional accountability.                               |
-|  - Endures across all phases of the project lifecycle.      |
 +-------------------------------------------------------------+
-                              VS
+
 +-------------------------------------------------------------+
 |                     EXECUTION PHASES                        |
-|   "When is this part of the project implemented & built?"   |
-|  - Sequential roadmap milestones (Phases 1 through 9).      |
-|  - Governs development order, integration gates, and CI.    |
-|  - A single member's module can span multiple phases.       |
-|  - Never implies a strict 1-to-1 mapping (e.g. Member 1 !=  |
-|    Phase 4 exclusively).                                    |
+|             "In what sequence is work completed?"           |
+|  - Sequential milestones (Phase 1 to Phase 9).              |
+|  - A developer's ownership spans multiple phases.           |
 +-------------------------------------------------------------+
 ```
-
-### Key Principles:
-1. **Ownership is Permanent:** Member 4 permanently owns the financial engine and database migrations; Member 1 permanently owns Identity and UserProfile.
-2. **Phases are Milestones:** Phase 3 completed the core booking engine (led by Member 4). Phase 4 delivers Auth & Profile (primarily Member 1), while Phase 5 delivers Skills & Matching (primarily Member 2).
-3. **Parallel Execution:** Phases 4 and 5 proceed in parallel because their underlying domain entities and business operations are decoupled.
-4. **Cross-Phase Collaboration:** Later phases (such as Phase 8: Integration & Hardening) involve all 5 members working jointly across modules.
 
 ---
 
 ## 7. Shared Infrastructure Ownership
 
-The following infrastructure components are shared across multiple modules. To prevent regressions, ownership and access rules are defined as follows:
-
-| Shared Component | Location | Technical Owner | Who May Edit | Review Requirement |
-|---|---|---|---|---|
-| `ApplicationDbContext` | `src/.../Persistence/ApplicationDbContext.cs` | Member 4 | Member 4 (Others submit Configurations) | Required approval from Member 4 |
-| `Program.cs` | `src/SkillSwap.API/Program.cs` | Member 4 / Team Lead | Any member adding middleware or route mapping | Architecture review required |
-| `DependencyInjection.cs` | `src/.../DependencyInjection.cs` | Member 4 | Any member adding DI service registrations | Scoped module blocks only |
-| `appsettings.json` | `src/SkillSwap.API/appsettings.json` | Member 1 & 4 | Member 1 (Auth), Member 4 (DB/Policy) | No hardcoded secrets |
-| `EF Core Migrations` | `src/.../Migrations/` | **Member 4 ONLY** | **NO OTHER MEMBER MAY EDIT OR ADD** | Strict single-owner gate |
-| `CurrentUserService` | `src/.../Services/CurrentUserService.cs` | Member 1 | Member 1 | Consumed by all via `ICurrentUserService` |
-| `GlobalExceptionHandlingMiddleware` | `src/SkillSwap.API/Middleware/` | Team Lead | Team Lead | Modifying status code mappings requires review |
+| Component | Primary Maintainer | Reviewers | Purpose |
+|---|---|---|---|
+| `IApplicationDbContext` | Developer 1 | All Developers | Database abstraction in Application layer |
+| `ApplicationDbContext` | Developer 1 | All Developers | EF Core context implementation |
+| `ICurrentUserService` | Developer 4 | Developer 1 | Resolves current authenticated user claims |
+| `IDateTimeProvider` | Developer 1 | All Developers | Deterministic UTC clock abstraction |
+| `GlobalExceptionHandlingMiddleware` | Developer 1 / Team | All Developers | Centralized HTTP exception translation |
+| `SqlWalletLockService` | Developer 1 | Developer 1 | Raw SQL row-level concurrency lock provider |
 
 ---
 
 ## 8. Database Ownership & Migration Rules
 
-1. **Sole Migration Authority:**
-   - **Member 4 is the exclusive owner of EF Core migrations.**
-   - Independent execution of `dotnet ef migrations add` by any other developer is strictly prohibited.
-2. **Schema Update Protocol for Members 1, 2, 3, and 5:**
-   - **Step 1:** Modify your entity in `src/SkillSwap.Domain/Entities/`.
-   - **Step 2:** Create or update your entity configuration in `src/SkillSwap.Infrastructure/Persistence/Configurations/` implementing `IEntityTypeConfiguration<T>`.
-   - **Step 3:** Coordinate with Member 4 by opening an issue or PR for the schema change.
-   - **Step 4:** Member 4 verifies navigation properties, cascade behaviors (`DeleteBehavior.Restrict`), indexes, and executes `dotnet ef migrations add <DescriptiveName>`.
-   - **Step 5:** Member 4 runs integration tests and merges the migration into `develop`.
-3. **Database Consistency Invariants:**
-   - All primary keys use `Guid` for users/wallets and `int`/`bigint` identities for relational tables.
-   - All datetime columns must be named with suffix `*Utc` and mapped to `datetime2`.
-   - Recurring availability slots map to SQL Server `time` via .NET `TimeOnly`.
-   - Hard deletes on financial and session records are strictly forbidden (`DeleteBehavior.Restrict` or `DeleteBehavior.NoAction`).
+> **CRITICAL DIRECTIVE:**
+> **Developer 1 is the exclusive authority for Entity Framework Core migrations.**
+> Independent execution of `dotnet ef migrations add` by other developers is strictly prohibited.
+
+### Schema Update Workflow:
+1. Developers define new or modified entities under `src/SkillSwap.Domain/Entities/`.
+2. Developers create or modify configuration classes in `src/SkillSwap.Infrastructure/Persistence/Configurations/`.
+3. Developers submit configuration changes to Developer 1.
+4. Developer 1 reviews foreign keys (ensuring `DeleteBehavior.Restrict`), adds indexes, executes `dotnet ef migrations add`, and verifies the snapshot.
 
 ---
 
 ## 9. Cross-Module Business Contracts
 
-These 34 business rules are finalized and non-negotiable:
-
-1. **Time Platform Currency:** Time is platform currency. Stored values are integer minutes.
-2. **Conceptual Credit Exchange:** 1 credit = 30 minutes; 2 credits = 60 minutes; 3 credits = 90 minutes.
-3. **Integer Storage:** No floating-point or decimal minutes exist in wallet or ledger records.
-4. **Wallet Balance Structure:** Wallet contains `AvailableMinutes` and `HeldMinutes`.
-5. **Non-Negative Invariant:** `AvailableMinutes >= 0` and `HeldMinutes >= 0` at all times.
-6. **Booking Escrow Hold:** Booking a session moves minutes: `AvailableMinutes -= duration`, `HeldMinutes += duration`.
-7. **Session Completion Transfer:** Learner `HeldMinutes -= duration`; Teacher `AvailableMinutes += duration`. 1:1 transfer. Zero platform fee in MVP.
-8. **Cancellation Policy:** Cancelling a session releases the hold: Learner `HeldMinutes -= duration`, `AvailableMinutes += duration`. No credit penalties in MVP.
-9. **Learner No-Show:** Learner held minutes are captured (`Capture`); Teacher receives minutes (`Earn`). Learner monthly quota remains consumed.
-10. **Teacher No-Show:** Learner held minutes are released (`Release`). Teacher receives nothing. Learner quota is freed.
-11. **Both No-Show:** Learner held minutes are released (`Release`). No teacher payment.
-12. **Disputed Session:** Status transitions to `Disputed`. Escrowed credits remain frozen. Admin-only arbitration.
-13. **Allowed Session Durations:** Strictly 30, 60, or 90 minutes. `InProgress` is derived dynamically from time (`StartUtc <= UtcNow <= EndUtc`), never stored.
-14. **Monthly Learning Quota:** Free = 180 min/month; Premium = 720 min/month. Teaching is uncapped. Derived dynamically from sessions based on `Session.StartUtc`. Evaluated inside transactional wallet lock.
-15. **Computed Matching:** Matching recommendations are computed dynamically. No persisted `Match` entity.
-16. **SwapRequest Statuses:** `Pending`, `Accepted`, `Declined`, `Cancelled`, `Expired`. There is NO `Completed` status.
-17. **Strict Role Contract:** `SwapRequest.RequesterId = Learner`, `SwapRequest.ReceiverId = Teacher`. Never invert these roles.
-18. **Session Mapping Integrity:** `Session.LearnerId = SwapRequest.RequesterId`, `Session.TeacherId = SwapRequest.ReceiverId`, `Session.SkillId = SwapRequest.SkillId`.
-19. **Teacher Qualification:** Receiver/Teacher must actively teach the requested skill (`UserSkill.Type = Teach`).
-20. **Skill Parity:** `Session.SkillId` must strictly equal `SwapRequest.SkillId`.
-21. **Session Mode:** `Online` supported in MVP. `InPerson` is future-ready.
-22. **Pending Session Expiration:** Session in `PendingConfirmation` expires at the earlier of: `CreatedAtUtc + PendingConfirmationHours` OR `StartUtc <= UtcNow`.
-23. **Automatic Completion:** Background worker auto-completes sessions when `EndUtc + AutoCompletionGracePeriodMinutes <= UtcNow`, regardless of whether participants clicked "Join".
-24. **Manual Completion:** Explicit participant-driven action requiring authenticated identity of Teacher or Learner.
-25. **Auto-Completion Separation:** Internal system operation executing without an HTTP caller context.
-26. **No-Show Reporting Authorization:** Only session participants may report no-show. Learner can only report Teacher; Teacher can only report Learner; participants cannot report themselves or report "Both". Admin/system can mark "Both".
-27. **Dispute Resolution Administrative Boundary:** Strictly restricted to platform administrators (`[Authorize(Roles = "Admin")]`). Self-arbitration by participants is strictly rejected.
-28. **Financial Immutability:** Financial, wallet, session, and ledger records must never be physically deleted.
-29. **Transactional Idempotency:** Wallet and credit ledger mutations must execute atomically within a database transaction.
-30. **Deterministic Concurrency Control:** Concurrency is protected via SQL Server row-level locking (`UPDLOCK, ROWLOCK`) in deterministic `UserId` order: `MIN(LearnerId, TeacherId)` followed by `MAX(LearnerId, TeacherId)`.
-31. **No Payment Gateway in MVP:** Real monetary payments, Stripe, and credit card processing are completely out of MVP scope.
-32. **Subscription Pricing Status:** Free = `0.00`; Premium = `NULL`. Pricing is unresolved.
-33. **UTC Timestamps:** All datetime fields must be stored in UTC (`datetime2`).
-34. **MVP Scope Boundaries:** No Redis, no microservices, no Kafka, no AI matching in MVP.
+1. **User Identity Invariant (Developer 4):**
+   - User primary key is strictly `Guid`.
+   - All modules anchor user records to this `Guid`.
+2. **Registration Bootstrapping Contract (Developers 4, 1, 2):**
+   - When a user successfully registers:
+     1. Insert `ApplicationUser` (Developer 4).
+     2. Insert `UserProfile` (Developer 4).
+     3. Insert `Wallet` with 0 balance (Developer 1 contract).
+     4. Insert `UserSubscription` on Free plan (Developer 2 contract).
+   - All 4 records are saved atomically.
+3. **Skill Verification for Swap Requests (Developers 3 & 1):**
+   - When a swap request is created, `SwapRequestService` verifies that `ReceiverId` actively offers `SkillId` with `Type = Teach` via Developer 3's `UserSkills`.
+4. **Safety Blocks Contract (Developers 1 & 2):**
+   - A swap request cannot be proposed if either participant has an active block in Developer 2's `UserBlocks`.
+5. **Review Eligibility Contract (Developers 1 & 2):**
+   - Reviews can only be submitted for sessions that have reached `SessionStatus.Completed`.
+6. **Monthly Learning Quota Contract (Developers 1 & 2):**
+   - `QuotaService` checks Developer 2's `UserSubscription` to determine whether the user is capped at 180 minutes (Free) or 720 minutes (Premium).
+7. **SignalR / REST Chat Coordination (Developers 1 & 2):**
+   - REST message sending in `ConversationsController` (Developer 2) persists via `IChatService` and broadcasts to `ChatHub` (Developer 1) connected clients via `IHubContext<ChatHub>`.
 
 ---
 
 ## 10. API Ownership Matrix
 
-This table provides the definitive ownership and status of all backend endpoints:
-
-| Endpoint Area | Method | Route | Purpose | Owner | Auth? | Role Req. | Status |
+| Controller / Endpoint Area | Method | Route | Description | Owning Developer | Auth | Role | Status |
 |---|---|---|---|---|---|---|---|
-| **Health** | GET | `/api/health` | Service liveness probe | Shared | No | Anonymous | **IMPLEMENTED** |
-| **Wallets** | GET | `/api/wallets/me` | Fetch caller's wallet balances | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Wallets** | GET | `/api/wallets/me/transactions` | Query wallet ledger audit trail | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Wallets** | GET | `/api/wallets/me/quota` | Query monthly learning quota status | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/book` | Book session and hold minutes in escrow | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | GET | `/api/sessions/{id}` | Get session details by ID | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | GET | `/api/sessions` | List sessions for current user | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/{id}/confirm` | Teacher confirms pending session | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/{id}/cancel` | Cancel session and release held minutes | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/{id}/join` | Mark participant as joined | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/{id}/complete` | Complete session and transfer escrow | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/{id}/no-show` | Participant reports other party no-show | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Sessions** | POST | `/api/sessions/{id}/dispute` | Report dispute and freeze escrow | Member 4 | Yes | Authenticated | **IMPLEMENTED** |
-| **Admin Sessions** | POST | `/api/admin/sessions/{id}/resolve-dispute` | Admin resolves disputed session | Member 4 | Yes | Admin | **IMPLEMENTED** |
-| **Chat Hub** | WS | `/hubs/chat` | SignalR real-time chat connection | Member 3 | Yes | Authenticated | **IMPLEMENTED (Foundation)** |
-| **Auth** | POST | `/api/auth/register` | Register new user account | Member 1 | No | Anonymous | **PLANNED** |
-| **Auth** | POST | `/api/auth/login` | Authenticate user and issue JWT | Member 1 | No | Anonymous | **PLANNED** |
-| **Profiles** | GET | `/api/profiles/me` | Get authenticated user's profile | Member 1 | Yes | Authenticated | **PLANNED** |
-| **Profiles** | PUT | `/api/profiles/me` | Update authenticated user's profile | Member 1 | Yes | Authenticated | **PLANNED** |
-| **Profiles** | GET | `/api/profiles/{id}` | Get public profile of a user | Member 1 | Yes | Authenticated | **PLANNED** |
-| **Categories** | GET | `/api/categories` | List active skill categories | Member 2 | No | Anonymous | **PLANNED** |
-| **Skills** | GET | `/api/skills` | Search/filter skills catalog | Member 2 | No | Anonymous | **PLANNED** |
-| **Skills** | GET | `/api/skills/{id}` | Get skill details | Member 2 | No | Anonymous | **PLANNED** |
-| **Skills** | POST | `/api/skills` | Add new skill to catalog | Member 2 | Yes | Admin | **PLANNED** |
-| **User Skills** | GET | `/api/users/me/skills` | List current user's teach/learn skills | Member 2 | Yes | Authenticated | **PLANNED** |
-| **User Skills** | POST | `/api/users/me/skills` | Add skill to teach/learn list | Member 2 | Yes | Authenticated | **PLANNED** |
-| **User Skills** | DELETE | `/api/users/me/skills/{id}` | Remove skill from teach/learn list | Member 2 | Yes | Authenticated | **PLANNED** |
-| **Availability** | GET | `/api/users/me/availability` | Get caller's weekly availability | Member 2 | Yes | Authenticated | **PLANNED** |
-| **Availability** | PUT | `/api/users/me/availability` | Update caller's weekly availability | Member 2 | Yes | Authenticated | **PLANNED** |
-| **Matching** | GET | `/api/matches` | Get computed skill matches | Member 2 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | POST | `/api/swap-requests` | Create new swap request | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | GET | `/api/swap-requests/incoming` | List incoming requests for teacher | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | GET | `/api/swap-requests/outgoing` | List outgoing requests for learner | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | GET | `/api/swap-requests/{id}` | Get swap request details | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | POST | `/api/swap-requests/{id}/accept` | Accept request and create Conversation | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | POST | `/api/swap-requests/{id}/decline` | Decline swap request | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Swap Requests** | POST | `/api/swap-requests/{id}/cancel` | Cancel outgoing swap request | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Conversations** | GET | `/api/conversations` | List user's conversations | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Conversations** | GET | `/api/conversations/{id}/messages` | Get message history with pagination | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Conversations** | POST | `/api/conversations/{id}/messages` | Send message (REST fallback) | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Conversations** | POST | `/api/conversations/{id}/read` | Mark messages as read | Member 3 | Yes | Authenticated | **PLANNED** |
-| **Reviews** | POST | `/api/reviews` | Submit post-session review | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Reviews** | GET | `/api/users/{id}/reviews` | Get reviews for a user | Member 5 | No | Anonymous | **PLANNED** |
-| **Notifications** | GET | `/api/notifications` | List user notifications | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Notifications** | POST | `/api/notifications/{id}/read` | Mark notification as read | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Badges** | GET | `/api/badges` | List all platform badges | Member 5 | No | Anonymous | **PLANNED** |
-| **Badges** | GET | `/api/users/{id}/badges` | List badges awarded to user | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Favorites** | GET | `/api/favorites` | List favorite users | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Favorites** | POST | `/api/favorites/{userId}` | Add user to favorites | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Favorites** | DELETE | `/api/favorites/{userId}` | Remove user from favorites | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Blocks** | POST | `/api/blocks/{userId}` | Block another user | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Blocks** | DELETE | `/api/blocks/{userId}` | Unblock a user | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Reports** | POST | `/api/reports` | Submit moderation report | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Subscriptions** | GET | `/api/subscriptions/plans` | List available subscription plans | Member 5 | No | Anonymous | **PLANNED** |
-| **Subscriptions** | GET | `/api/subscriptions/me` | Get current user's active plan | Member 5 | Yes | Authenticated | **PLANNED** |
-| **Subscriptions** | POST | `/api/subscriptions/subscribe` | Mock subscribe to plan (No real gateway) | Member 5 | Yes | Authenticated | **PLANNED** |
+| **Auth** | POST | `/api/auth/register` | Register new user account | Developer 1 | No | Anonymous | **IMPLEMENTED** |
+| **Auth** | POST | `/api/auth/login` | Authenticate with credentials | Developer 1 | No | Anonymous | **IMPLEMENTED** |
+| **Profiles** | GET | `/api/profiles/me` | Current user profile | Developer 1 | Yes | Authenticated | **IMPLEMENTED** |
+| **Profiles** | PUT | `/api/profiles/me` | Update current user profile | Developer 1 | Yes | Authenticated | **IMPLEMENTED** |
+| **Profiles** | GET | `/api/profiles/{id}` | Get public profile by user ID | Developer 1 | Yes | Authenticated | **IMPLEMENTED** |
+| **Categories** | GET | `/api/categories` | List active categories | Developer 2 | No | Anonymous | **IMPLEMENTED** |
+| **Categories** | POST | `/api/categories` | Create new category | Developer 2 | Yes | Admin | **IMPLEMENTED** |
+| **Skills** | GET | `/api/skills` | Search skills catalog | Developer 2 | No | Anonymous | **IMPLEMENTED** |
+| **Skills** | GET | `/api/skills/{id}` | Get skill details | Developer 2 | No | Anonymous | **IMPLEMENTED** |
+| **Skills** | POST | `/api/skills` | Create new skill | Developer 2 | Yes | Admin | **IMPLEMENTED** |
+| **User Skills** | GET | `/api/user-skills/me` | List caller's skills | Developer 2 | Yes | Authenticated | **IMPLEMENTED** |
+| **User Skills** | POST | `/api/user-skills` | Declare teach/learn skill | Developer 2 | Yes | Authenticated | **IMPLEMENTED** |
+| **User Skills** | DELETE | `/api/user-skills/{id}` | Remove declared skill | Developer 2 | Yes | Authenticated | **IMPLEMENTED** |
+| **Availability** | GET | `/api/availability/me` | Get caller's availability | Developer 2 | Yes | Authenticated | **IMPLEMENTED** |
+| **Availability** | PUT | `/api/availability/me` | Update caller's availability | Developer 2 | Yes | Authenticated | **IMPLEMENTED** |
+| **Matching** | GET | `/api/matches` | Get computed matches | Developer 2 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | POST | `/api/swap-requests` | Create new swap proposal | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | GET | `/api/swap-requests/incoming` | List incoming proposals | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | GET | `/api/swap-requests/outgoing` | List outgoing proposals | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | GET | `/api/swap-requests/{id}` | Get proposal details | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | POST | `/api/swap-requests/{id}/accept` | Accept swap proposal | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | POST | `/api/swap-requests/{id}/decline` | Decline swap proposal | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Swap Requests** | POST | `/api/swap-requests/{id}/cancel` | Cancel outgoing proposal | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Conversations** | GET | `/api/conversations` | List user's conversations | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Conversations** | GET | `/api/conversations/{id}` | Get conversation metadata | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Conversations** | GET | `/api/conversations/{id}/messages` | Get paginated message history | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Conversations** | POST | `/api/conversations/{id}/messages` | Send message via REST API | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Conversations** | POST | `/api/conversations/{id}/read` | Mark conversation as read | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **SignalR Chat** | WS | `/hubs/chat` | Real-time messaging hub | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions` | Book session with escrow hold | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | GET | `/api/sessions/{id}` | Get session details | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions/{id}/confirm` | Teacher confirms session | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions/{id}/join` | Participant joins session | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions/{id}/complete` | Complete session & payout | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions/{id}/cancel` | Cancel session & refund | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions/{id}/no-show` | Report participant no-show | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Sessions** | POST | `/api/sessions/{id}/dispute` | Escalate session dispute | Developer 3 | Yes | Authenticated | **IMPLEMENTED** |
+| **Admin Wallets**| POST | `/api/admin/wallets/{userId}/bonus` | Admin idempotent bonus grant | Developer 3 | Yes | Admin | **IMPLEMENTED** |
+| **Reviews** | POST | `/api/reviews` | Submit post-session review | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Reviews** | GET | `/api/reviews/user/{userId}` | Get reviews for a user | Developer 4 | No | Anonymous | **IMPLEMENTED** |
+| **Notifications** | GET | `/api/notifications` | List user notifications | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Notifications** | POST | `/api/notifications/{id}/read` | Mark notification as read | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Badges** | GET | `/api/badges` | List all platform badges | Developer 4 | No | Anonymous | **IMPLEMENTED** |
+| **Badges** | GET | `/api/badges/user/{userId}` | List badges awarded to user | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Favorites** | GET | `/api/favorites` | List favorite users | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Favorites** | POST | `/api/favorites/{userId}` | Add user to favorites | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Favorites** | DELETE | `/api/favorites/{userId}` | Remove user from favorites | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Blocks** | POST | `/api/blocks/{userId}` | Block another user | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Blocks** | DELETE | `/api/blocks/{userId}` | Unblock a user | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Reports** | POST | `/api/reports` | Submit moderation report | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Subscriptions** | GET | `/api/subscriptions/plans` | List available subscription plans | Developer 4 | No | Anonymous | **IMPLEMENTED** |
+| **Subscriptions** | GET | `/api/subscriptions/me` | Get current user's active plan | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
+| **Subscriptions** | POST | `/api/subscriptions/subscribe` | Mock subscribe to plan | Developer 4 | Yes | Authenticated | **IMPLEMENTED** |
 
 ---
 
@@ -405,17 +332,18 @@ This table provides the definitive ownership and status of all backend endpoints
 
 | File / Component Path | Primary Owner | Who May Edit | Consultation Required | Actions Requiring Team Review |
 |---|---|---|---|---|
-| `src/.../Persistence/ApplicationDbContext.cs` | Member 4 | Member 4 | Member 4 | Adding DbSets, changing model conventions, table mappings |
-| `src/.../Identity/ApplicationUser.cs` | Member 1 | Member 1 | Member 4 | Adding identity properties, changing primary keys |
-| `src/.../Services/CurrentUserService.cs` | Member 1 | Member 1 | All Members | Modifying claims extraction or role checking |
-| `src/.../Services/JwtTokenService.cs` | Member 1 | Member 1 | Member 1 | Altering JWT claim format or expiry |
-| `src/.../Services/DateTimeProvider.cs` | Member 4 | Member 4 | All Members | Altering time abstraction interface `IDateTimeProvider` |
-| `src/.../Services/SqlWalletLockService.cs` | Member 4 | Member 4 | Lead | Altering SQL Server lock hints or ordering |
-| `src/SkillSwap.API/Program.cs` | Team Lead | All (scoped) | Member 4 | Changing middleware pipeline, CORS, or DI calls |
-| `src/SkillSwap.API/Hubs/ChatHub.cs` | Member 3 | Member 3 | Member 3 | Modifying hub methods or connection auth |
-| `src/SkillSwap.API/Extensions/AuthenticationExtensions.cs` | Member 1 | Member 1 | Member 1 | Changing JWT validation parameters |
+| `src/.../Persistence/ApplicationDbContext.cs` | Developer 3 | Developer 3 | Developer 3 | Adding DbSets, changing model conventions, table mappings |
+| `src/.../Identity/ApplicationUser.cs` | Developer 1 | Developer 1 | Developer 3 | Adding identity properties, changing primary keys |
+| `src/.../Services/CurrentUserService.cs` | Developer 1 | Developer 1 | All Developers | Modifying claims extraction or role checking |
+| `src/.../Services/JwtTokenService.cs` | Developer 1 | Developer 1 | Developer 1 | Altering JWT claim format or expiry |
+| `src/.../Services/DateTimeProvider.cs` | Developer 3 | Developer 3 | All Developers | Altering time abstraction interface `IDateTimeProvider` |
+| `src/.../Services/SqlWalletLockService.cs` | Developer 3 | Developer 3 | Lead | Altering SQL Server lock hints or ordering |
+| `src/SkillSwap.API/Program.cs` | Developer 3 | All (scoped) | Developer 3 | Changing middleware pipeline, CORS, or DI calls |
+| `src/SkillSwap.API/Hubs/ChatHub.cs` | Developer 3 | Developer 3 | Developer 3 | Modifying hub methods or connection auth |
+| `src/SkillSwap.API/Controllers/ConversationsController.cs` | Developer 4 | Developer 4 | Developer 3 | Modifying REST messaging routes or DTOs |
+| `src/SkillSwap.API/Extensions/AuthenticationExtensions.cs` | Developer 1 | Developer 1 | Developer 1 | Changing JWT validation parameters |
 | `src/SkillSwap.API/Extensions/SwaggerExtensions.cs` | Shared | Shared | Lead | Changing security definitions or API metadata |
-| `src/SkillSwap.API/Middleware/GlobalExceptionHandlingMiddleware.cs` | Team Lead | Team Lead | All Members | Modifying exception to HTTP status code mappings |
+| `src/SkillSwap.API/Middleware/GlobalExceptionHandlingMiddleware.cs` | Developer 3 | Developer 3 | All Developers | Modifying exception to HTTP status code mappings |
 
 ---
 
@@ -425,8 +353,8 @@ This table provides the definitive ownership and status of all backend endpoints
 - **User Identity Context:** Application code retrieves caller identity via `ICurrentUserService.UserId`.
 - **Role Enforcement:**
   - Standard user endpoints are protected by `[Authorize]`.
-  - Administrative endpoints (such as `POST /api/admin/sessions/{id}/resolve-dispute`) are strictly guarded by `[Authorize(Roles = "Admin")]`.
-- **Defense in Depth:** Even with valid admin tokens, business services enforce domain invariants (e.g., rejecting an admin who attempts to resolve their own dispute).
+  - Administrative endpoints (such as `POST /api/admin/wallets/{userId}/bonus`) are strictly guarded by `[Authorize(Roles = "Admin")]`.
+- **Defense in Depth:** Even with valid admin tokens, business services enforce domain invariants.
 
 ---
 
@@ -434,11 +362,11 @@ This table provides the definitive ownership and status of all backend endpoints
 
 - **Atomicity:** All mutations touching `Wallet.AvailableMinutes`, `Wallet.HeldMinutes`, or `CreditTransactions` must execute inside a database transaction (`IDbContextTransaction`).
 - **Ledger Invariant:** Every modification to a wallet's balances must be accompanied by an append-only `CreditTransaction` record documenting the `AvailableDelta`, `HeldDelta`, and `CreditTransactionType`.
+- **Idempotency Protection:** Administrative bonus grants and adjustments enforce idempotency keys backed by the unique filtered index `UX_CreditTransaction_IdempotencyKey`.
 - **Double Completion Guard:** Double execution is blocked by conditional atomic updates:
   ```sql
   UPDATE Sessions SET Status = 3, UpdatedAtUtc = @Now WHERE Id = @Id AND Status = 2
   ```
-  If zero rows are modified, completion has already occurred or the session is in an invalid state, preventing duplicate credit transfers.
 
 ---
 
@@ -462,8 +390,8 @@ This table provides the definitive ownership and status of all backend endpoints
 ## 16. Testing Boundaries & Quality Gates
 
 - **Unit Tests:** Must test pure business logic using mock DbContext or in-memory factories. Must run in milliseconds.
-- **Concurrency Integration Tests:** Located in `SkillSwap.Tests/Integration/SqlServerConcurrencyTests.cs`. Test actual SQL Server transactions, `UPDLOCK, ROWLOCK` row locking, and simultaneous booking race conditions.
-- **Quality Gate:** Before any PR can merge into `develop`, `dotnet test` must execute with **zero failures** (currently 74 passing tests).
+- **Integration Tests:** Located in `SkillSwap.Tests/Integration/`. Test actual SQL Server transactions, `UPDLOCK, ROWLOCK` row locking, bonus idempotency, and end-to-end HTTP user journeys.
+- **Quality Gate:** Before any PR can merge into `develop`, `dotnet test` must execute with **zero failures** (currently **351 passing tests**).
 
 ---
 
@@ -471,23 +399,17 @@ This table provides the definitive ownership and status of all backend endpoints
 
 The project follows a strictly defined 9-phase execution roadmap:
 
-| Phase | Milestone Name | Primary Focus | Status | Parallel Execution Rules |
+| Phase | Milestone Name | Primary Lead | Status | Parallel Execution Rules |
 |---|---|---|---|---|
-| **Phase 1** | **Foundation** | Architecture Agent | ✅ **COMPLETE** | Clean Architecture projects, solution, health probes, test fixtures |
-| **Phase 2** | **Database & Domain** | Domain Agent | ✅ **COMPLETE** | 22 entities, 12 enums, EF configurations, InitialCreate migration |
-| **Phase 3** | **Core Business Engine** | Member 4 / Financial Lead | ✅ **COMPLETE** | Wallets, CreditTransaction ledger, Session booking, UPDLOCK concurrency, Quota inside transaction, 74 tests |
-| **Phase 4** | **Auth & Profile** | Primarily Member 1 | **READY FOR DEV** | ASP.NET Core Identity, JWT issuance, UserProfile APIs |
-| **Phase 5** | **Skills, Availability & Matching** | Primarily Member 2 | **READY FOR DEV** | Categories, Skills catalog, UserSkills, AvailabilitySlots, computed matching |
-| **Phase 6** | **Swap Requests & Chat** | Primarily Member 3 | **PLANNED** | SwapRequest negotiation, Requester=Learner contract, Conversations, Messages, ChatHub SignalR |
-| **Phase 7** | **Platform Features** | Primarily Member 5 | **PLANNED** | Reviews, Notifications, Badges, Favorites, UserBlocks, Reports, Subscription tiers |
-| **Phase 8** | **Integration, Security & Hardening** | Cross-Team (All 5 Members) | **PLANNED** | End-to-end integration, security audits, penetration testing, concurrency edge-case verification |
-| **Phase 9** | **Deployment** | DevOps / Team Lead | **PLANNED** | Production CI/CD pipelines, Docker containerization, SQL Server cloud provisioning, release tagging |
-
-### Parallel Execution Notes:
-- **Phases 4 and 5 proceed in parallel:** Because Phase 4 (Member 1: Identity/Auth/Profile) and Phase 5 (Member 2: Skills/Availability/Matching) have decoupled domain models, Member 1 and Member 2 work concurrently on their respective feature branches (`feature/auth-profile` and `feature/skills-matching`) branching from `develop`.
-- **Phase 6 depends on core contracts:** Member 3 initiates Phase 6 once Phase 2/3 contracts are reviewed and consumes skills from Phase 5.
-- **Phase 7 delivers engagement:** Member 5 integrates reviews against Phase 3 completed sessions and safety blocks against Phase 6 messaging.
-- **Phase 8 & 9 are team-wide:** Security audits, load testing, and production deployment.
+| **Phase 1** | **Foundation** | Architecture Team | ✅ **COMPLETE** | Clean Architecture projects, solution, health probes, test fixtures |
+| **Phase 2** | **Database & Domain** | Domain Team | ✅ **COMPLETE** | 22 entities, 12 enums, EF configurations, InitialCreate migration |
+| **Phase 3** | **Core Business Engine** | Developer 1 | ✅ **COMPLETE** | Wallets, CreditTransaction ledger, Session booking, UPDLOCK concurrency, Quota inside transaction, tests |
+| **Phase 4** | **Auth & Profile** | Developer 4 | ✅ **COMPLETE** | ASP.NET Core Identity, JWT issuance, UserProfile APIs |
+| **Phase 5** | **Skills, Availability & Matching** | Developer 3 | ✅ **COMPLETE** | Categories, Skills catalog, UserSkills, AvailabilitySlots, computed matching |
+| **Phase 6** | **Swap Requests & Chat** | Developers 1 & 2 | ✅ **COMPLETE** | SwapRequest negotiation, Requester=Learner contract, Conversations, Messages, ChatHub SignalR, REST API |
+| **Phase 7** | **Platform Features** | Developer 2 | ✅ **COMPLETE** | Reviews, Notifications, Badges, Favorites, UserBlocks, Reports, Subscription tiers |
+| **Phase 8** | **Integration, Security & Hardening** | All Four Developers | ✅ **COMPLETE** | End-to-end integration, security audits, startup validation, 351 passing tests |
+| **Phase 9** | **Deployment & Hosting** | Developer 1 | ✅ **COMPLETE** | Live production API on MonsterASP.NET (`https://skill-swap.runasp.net`), Swagger, and Health check |
 
 ---
 
@@ -496,7 +418,7 @@ The project follows a strictly defined 9-phase execution roadmap:
 If a developer needs to change an interface, DTO, enum, or entity:
 1. **Never alter an enum value or remove an enum entry.**
 2. **Never change an existing DTO property name or type.** (Add optional properties if necessary).
-3. **Open an RFC / PR discussion** tagging the owning developer and Member 4 before making changes to shared abstractions.
+3. **Open an RFC / PR discussion** tagging the owning developer and Developer 1 before making changes to shared abstractions.
 
 ---
 
@@ -597,4 +519,4 @@ sequenceDiagram
 ```
 
 ---
-*SkillSwap Architecture Board -- Master Blueprint*
+*SkillSwap Architecture Board — Master Blueprint*

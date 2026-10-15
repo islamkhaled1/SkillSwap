@@ -1,10 +1,11 @@
 namespace SkillSwap.Application.DTOs.Badges;
 
-public record UserBadgeDto(
-    Guid UserId,
-    int BadgeId,
-    string Code,
-    string Name,
-    string Description,
-    string? IconUrl,
-    DateTime AwardedAtUtc);
+public sealed class UserBadgeDto
+{
+    public int BadgeId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string? IconUrl { get; init; }
+    public DateTime AwardedAtUtc { get; init; }
+}

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SkillSwap.Application.Abstractions;
 using SkillSwap.Application.Common;
@@ -7,50 +8,65 @@ using SkillSwap.Domain.Enums;
 
 namespace SkillSwap.Application.Services;
 
-public class BadgeService : IBadgeService
+public sealed class BadgeService : IBadgeService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
 
-    public BadgeService(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public BadgeService(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Result<IReadOnlyList<BadgeDto>>> GetAllBadgesAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<BadgeDto>>> GetBadgesAsync(
+        CancellationToken cancellationToken = default)
     {
         var badges = await _context.Badges
             .AsNoTracking()
-            .OrderBy(b => b.Name)
-            .Select(b => new BadgeDto(
-                b.Id,
-                b.Code,
-                b.Name,
-                b.Description,
-                b.IconUrl))
+            .OrderBy(b => b.Id)
+            .Select(b => new BadgeDto
+            {
+                Id = b.Id,
+                Code = b.Code,
+                Name = b.Name,
+                Description = b.Description,
+                IconUrl = b.IconUrl
+            })
             .ToListAsync(cancellationToken);
 
         return Result.Success<IReadOnlyList<BadgeDto>>(badges);
     }
 
-    public async Task<Result<IReadOnlyList<UserBadgeDto>>> GetBadgesForUserAsync(
+    public async Task<Result<IReadOnlyList<UserBadgeDto>>> GetUserBadgesAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
+        var userExists = await _context.UserProfiles
+            .AsNoTracking()
+            .AnyAsync(p => p.UserId == userId, cancellationToken);
+
+        if (!userExists)
+        {
+            return Result.Failure<IReadOnlyList<UserBadgeDto>>($"User with ID {userId} was not found.");
+        }
+
         var userBadges = await _context.UserBadges
             .AsNoTracking()
             .Include(ub => ub.Badge)
             .Where(ub => ub.UserId == userId)
             .OrderByDescending(ub => ub.AwardedAtUtc)
-            .Select(ub => new UserBadgeDto(
-                ub.UserId,
-                ub.BadgeId,
-                ub.Badge.Code,
-                ub.Badge.Name,
-                ub.Badge.Description,
-                ub.Badge.IconUrl,
-                ub.AwardedAtUtc))
+            .Select(ub => new UserBadgeDto
+            {
+                BadgeId = ub.BadgeId,
+                Code = ub.Badge.Code,
+                Name = ub.Badge.Name,
+                Description = ub.Badge.Description,
+                IconUrl = ub.Badge.IconUrl,
+                AwardedAtUtc = ub.AwardedAtUtc
+            })
             .ToListAsync(cancellationToken);
 
         return Result.Success<IReadOnlyList<UserBadgeDto>>(userBadges);
@@ -61,60 +77,74 @@ public class BadgeService : IBadgeService
         string badgeCode,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(badgeCode))
+        {
+            return Result.Failure<UserBadgeDto>("Badge code is required.");
+        }
+
+        var userExists = await _context.UserProfiles
+            .AsNoTracking()
+            .AnyAsync(p => p.UserId == userId, cancellationToken);
+
+        if (!userExists)
+        {
+            return Result.Failure<UserBadgeDto>($"User with ID {userId} was not found.");
+        }
+
+        var normalizedCode = badgeCode.Trim().ToUpperInvariant();
         var badge = await _context.Badges
-            .FirstOrDefaultAsync(b => b.Code.ToLower() == badgeCode.ToLower(), cancellationToken);
+            .FirstOrDefaultAsync(b => b.Code.ToUpper() == normalizedCode, cancellationToken);
 
         if (badge == null)
         {
             return Result.Failure<UserBadgeDto>($"Badge with code '{badgeCode}' was not found.");
         }
 
-        var existing = await _context.UserBadges
-            .Include(ub => ub.Badge)
-            .FirstOrDefaultAsync(ub => ub.UserId == userId && ub.BadgeId == badge.Id, cancellationToken);
+        var alreadyAwarded = await _context.UserBadges
+            .AnyAsync(ub => ub.UserId == userId && ub.BadgeId == badge.Id, cancellationToken);
 
-        if (existing != null)
+        if (alreadyAwarded)
         {
-            return Result.Success(new UserBadgeDto(
-                existing.UserId,
-                existing.BadgeId,
-                existing.Badge.Code,
-                existing.Badge.Name,
-                existing.Badge.Description,
-                existing.Badge.IconUrl,
-                existing.AwardedAtUtc));
+            return Result.Failure<UserBadgeDto>("User has already been awarded this badge.");
         }
 
+        var now = _dateTimeProvider.UtcNow;
         var userBadge = new UserBadge
         {
             UserId = userId,
             BadgeId = badge.Id,
-            AwardedAtUtc = _dateTimeProvider.UtcNow,
-            Badge = badge
+            AwardedAtUtc = now
         };
 
         _context.UserBadges.Add(userBadge);
 
-        var notification = new Notification
+        var payload = JsonSerializer.Serialize(new
+        {
+            BadgeId = badge.Id,
+            BadgeCode = badge.Code,
+            BadgeName = badge.Name,
+            Message = $"Congratulations! You earned the '{badge.Name}' badge."
+        });
+
+        _context.Notifications.Add(new Notification
         {
             UserId = userId,
             Type = NotificationKind.BadgeEarned,
-            Payload = $"{{\"badgeCode\":\"{badge.Code}\",\"badgeName\":\"{badge.Name}\"}}",
+            Payload = payload,
             IsRead = false,
-            CreatedAtUtc = _dateTimeProvider.UtcNow
-        };
-
-        _context.Notifications.Add(notification);
+            CreatedAtUtc = now
+        });
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new UserBadgeDto(
-            userId,
-            badge.Id,
-            badge.Code,
-            badge.Name,
-            badge.Description,
-            badge.IconUrl,
-            userBadge.AwardedAtUtc));
+        return Result.Success(new UserBadgeDto
+        {
+            BadgeId = badge.Id,
+            Code = badge.Code,
+            Name = badge.Name,
+            Description = badge.Description,
+            IconUrl = badge.IconUrl,
+            AwardedAtUtc = userBadge.AwardedAtUtc
+        });
     }
 }

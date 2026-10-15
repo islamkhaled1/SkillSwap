@@ -6,7 +6,6 @@ using SkillSwap.Application.DTOs.Subscriptions;
 
 namespace SkillSwap.API.Controllers;
 
-[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -23,47 +22,73 @@ public class SubscriptionsController : ControllerBase
         _currentUserService = currentUserService;
     }
 
-    [AllowAnonymous]
+    /// <summary>
+    /// Lists all active subscription plans available on the platform.
+    /// </summary>
     [HttpGet("plans")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(IReadOnlyList<SubscriptionPlanDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPlans(CancellationToken cancellationToken)
     {
-        var result = await _subscriptionService.GetPlansAsync(cancellationToken);
+        var result = await _subscriptionService.GetActivePlansAsync(cancellationToken);
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Retrieves the current active subscription tier for the authenticated user.
+    /// </summary>
     [HttpGet("me")]
+    [Authorize]
     [ProducesResponseType(typeof(UserSubscriptionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMySubscription(CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _subscriptionService.GetActiveSubscriptionAsync(callerId, cancellationToken);
-        return Ok(result.Value);
-    }
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
-    [HttpPost("subscribe")]
-    [ProducesResponseType(typeof(UserSubscriptionDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Subscribe([FromBody] SubscribeRequest request, CancellationToken cancellationToken)
-    {
-        var callerId = GetCurrentUserId();
-        var result = await _subscriptionService.SubscribeAsync(callerId, request.PlanId, cancellationToken);
-
+        var result = await _subscriptionService.GetCurrentSubscriptionAsync(currentUserId.Value, cancellationToken);
         if (!result.IsSuccess)
         {
-            return BadRequest(result.Error);
+            return NotFound(result.Error);
         }
 
         return Ok(result.Value);
     }
 
-    private Guid GetCurrentUserId()
+    /// <summary>
+    /// Updates or subscribes the authenticated user to a subscription tier (mock upgrade in MVP).
+    /// </summary>
+    [HttpPost("subscribe")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserSubscriptionDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Subscribe(
+        [FromBody] SubscribeRequest request,
+        CancellationToken cancellationToken)
     {
-        if (_currentUserService.UserId == null)
-            throw new UnauthorizedAccessException("User is not authenticated.");
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
-        return _currentUserService.UserId.Value;
+        var result = await _subscriptionService.SubscribeAsync(currentUserId.Value, request, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(result.Error);
+            }
+
+            return BadRequest(result.Error);
+        }
+
+        return Ok(result.Value);
     }
 }

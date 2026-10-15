@@ -1,6 +1,6 @@
-# SkillSwap Backend -- Team Workflow & Engineering Guidelines
+﻿# SkillSwap Backend — Team Workflow & Engineering Guidelines
 
-This document outlines the collaborative engineering workflow, Git branching standards, pull request policies, database migration gates, and conflict prevention rules for the 5-member backend development team.
+This document outlines the collaborative engineering workflow, Git branching standards, pull request policies, database migration gates, and conflict prevention rules for the 4-developer backend development team.
 
 ---
 
@@ -31,11 +31,10 @@ main (Production / Locked / Tagged Releases)
   |  (Merge via release PR only)
 develop (Integration Branch / CI Gate)
   ^
-  +-- feature/auth-profile        (Phase 4 / Member 1)
-  +-- feature/skills-matching     (Phase 5 / Member 2)
-  +-- feature/swap-chat           (Phase 6 / Member 3)
-  +-- feature/session-wallet      (Phase 3 Maintenance / Member 4)
-  +-- feature/reviews-platform    (Phase 7 / Member 5)
+  +-- feature/session-wallet-swap     (Developer 1: Sessions, Wallets, Swap, ChatHub, Hosting)
+  +-- feature/platform-conversations  (Developer 2: Platform, Conversations REST)
+  +-- feature/skills-matching         (Developer 3: Skills, Availability, Matching)
+  +-- feature/auth-profile            (Developer 4: Auth, Identity, Profiles)
 ```
 
 ### Branch Invariants:
@@ -48,12 +47,10 @@ develop (Integration Branch / CI Gate)
    - All feature branches branch off `develop` and merge back into `develop`.
    - **Direct pushes are blocked.** Merges occur solely through approved Pull Requests that pass CI tests.
 3. **Dedicated Feature Branches:**
-   - `feature/auth-profile`: Member 1 (Auth, Identity, UserProfile).
-   - `feature/skills-matching`: Member 2 (Categories, Skills, UserSkills, Availability, Matching).
-   - `feature/swap-chat`: Member 3 (SwapRequests, Conversations, Messages, SignalR ChatHub).
-   - `feature/session-wallet`: Member 4 (Sessions, Wallets, CreditTransactions, Background Workers).
-   - `feature/reviews-platform`: Member 5 (Reviews, Notifications, Badges, Favorites, Blocks, Reports, Subscriptions).
-   - Sub-features may use format: `feature/<module>/<short-description>` (e.g., `feature/auth/register-endpoint`).
+   - `feature/auth-profile`: Developer 1 (Auth, Identity, UserProfile).
+   - `feature/skills-matching`: Developer 2 (Categories, Skills, UserSkills, Availability, Matching).
+   - `feature/session-wallet-swap`: Developer 3 (Sessions, Wallets, CreditTransactions, SwapRequests, ChatHub, Migrations).
+   - `feature/platform-conversations`: Developer 4 (Reviews, Notifications, Badges, Favorites, Blocks, Reports, Subscriptions, Conversations REST).
 
 ---
 
@@ -78,13 +75,7 @@ The team strictly adheres to the **Conventional Commits** specification. Every c
 - `chore`: Tooling, build scripts, or dependency configuration.
 
 ### Allowed Scopes:
-- `auth`, `profile`, `skills`, `matching`, `swap`, `chat`, `session`, `wallet`, `ledger`, `reviews`, `notifications`, `infra`, `db`.
-
-### Examples:
-- `feat(auth): implement user registration endpoint and DTO validation`
-- `fix(wallet): correct deterministic lock ordering for concurrent bookings`
-- `test(session): add dispute resolution authorization tests`
-- `docs(team): update cross-module contract for swap request accepted state`
+- `auth`, `profile`, `skills`, `matching`, `swap`, `chat`, `session`, `wallet`, `ledger`, `reviews`, `notifications`, `infra`, `db`, `deploy`.
 
 ---
 
@@ -97,7 +88,7 @@ git checkout develop
 git pull origin develop
 git checkout feature/your-feature
 git rebase develop
-dotnet test
+dotnet test SkillSwap.sln --configuration Release
 ```
 
 ### Step 2: PR Creation
@@ -112,7 +103,7 @@ dotnet test
 ### Step 3: CI Quality Gate
 Every PR must pass automated CI pipeline checks:
 - Clean build of `SkillSwap.sln` with zero compilation errors and warnings treated as errors.
-- 100% passing xUnit tests across all test suites.
+- 100% passing xUnit tests across all test suites (currently 351 passing tests).
 
 ---
 
@@ -120,9 +111,9 @@ Every PR must pass automated CI pipeline checks:
 
 1. **Reviewer Quorum:**
    - Every PR requires **at least 2 approvals** before merging.
-   - Any PR touching `src/SkillSwap.Domain/`, `ApplicationDbContext.cs`, or migrations requires explicit approval from **Member 4 (Lead)**.
+   - Any PR touching `src/SkillSwap.Domain/`, `ApplicationDbContext.cs`, or migrations requires explicit approval from **Developer 1 (Lead Financial & Migrations Owner)**.
 2. **Review SLA:**
-   - Team members must review open PRs within **24 hours** of submission.
+   - Developers must review open PRs within **24 hours** of submission.
 3. **Review Focus:**
    - Respect for Clean Architecture boundaries (`SkillSwap.Application` must never reference `Infrastructure` or `API`).
    - Correctness of business invariants (non-negative balances, UTC timestamps, role contracts).
@@ -135,7 +126,7 @@ Every PR must pass automated CI pipeline checks:
 Certain files are shared across multiple modules and represent high risk for merge conflicts and regressions:
 
 1. **`src/SkillSwap.API/Program.cs`:**
-   - Only add scoped service registrations or route mappings in the designated section.
+   - Scoped service registrations or route mappings must be added only in designated sections.
    - Never reorder existing middleware (`GlobalExceptionHandlingMiddleware`, `UseAuthentication`, `UseAuthorization`, `UseCors`).
 2. **`src/SkillSwap.Infrastructure/DependencyInjection.cs`:**
    - Add module dependencies within your designated module comment block.
@@ -149,26 +140,26 @@ Certain files are shared across multiple modules and represent high risk for mer
 ## 6. Database Migration Policy & Protocol
 
 > **CRITICAL DIRECTIVE:**
-> **Member 4 is the SOLE authority for EF Core migrations.**
-> No other team member may execute `dotnet ef migrations add` or modify migration files.
+> **Developer 1 is the SOLE authority for EF Core migrations.**
+> No other developer may execute `dotnet ef migrations add` or modify migration files.
 
 ### 5-Step Protocol for Schema Changes:
 1. **Developer modifies Domain Entity:** The owning developer adds/modifies fields on their entity under `src/SkillSwap.Domain/Entities/`.
 2. **Developer creates Entity Configuration:** The owning developer creates or updates `IEntityTypeConfiguration<T>` in `src/SkillSwap.Infrastructure/Persistence/Configurations/`.
-3. **Developer creates RFC / Coordination Issue:** The developer notifies Member 4 detailing the requested schema modification and index requirements.
-4. **Member 4 Generates Migration:** Member 4 inspects the configuration, ensures foreign keys use `DeleteBehavior.Restrict`, and generates the migration:
+3. **Developer creates RFC / Coordination Issue:** The developer notifies Developer 1 detailing the requested schema modification and index requirements.
+4. **Developer 1 Generates Migration:** Developer 1 inspects the configuration, ensures foreign keys use `DeleteBehavior.Restrict`, and generates the migration:
    ```bash
    dotnet ef migrations add <DescriptiveName> --project src/SkillSwap.Infrastructure --startup-project src/SkillSwap.API
    ```
-5. **Member 4 Validates & Commits:** Member 4 executes database migration tests and merges the migration directly into `develop`.
+5. **Developer 1 Validates & Commits:** Developer 1 executes database migration tests and merges the migration directly into `develop`.
 
 ---
 
 ## 7. Merge Conflict Resolution Policy
 
 If a merge conflict occurs when rebasing on `develop`:
-1. **Never guess another member's business logic.**
-2. Consult the relevant member's specification document (`MEMBER-X-*.md`).
+1. **Never guess another developer's business logic.**
+2. Consult the relevant developer's specification document (`DEVELOPER-X-*.md`).
 3. If the conflict involves shared DTOs or services, conduct an immediate synchronous pairing session with the other owner.
 4. After resolving conflicts locally, re-run `dotnet build` and `dotnet test`.
 5. Never use `git push --force` on shared branches. Use `git push --force-with-lease` on personal feature branches only.
@@ -179,14 +170,14 @@ If a merge conflict occurs when rebasing on `develop`:
 
 1. **Zero Test Regressions:**
    - Under no circumstances will a PR be merged if any existing test fails.
-   - The test suite currently contains **74 passing tests**. Every PR must maintain or increase this count.
+   - The test suite currently contains **351 passing tests**. Every PR must maintain or increase this count.
 2. **Mandatory Test Coverage:**
    - **Unit Tests:** Every new application service method must have unit tests covering success paths, edge cases, and expected exception throws.
    - **Authorization Tests:** Every endpoint must test that unauthorized callers receive 401 or 403.
    - **Invariant Tests:** Business rules (such as non-negative wallets or 30/60/90 duration limits) must have explicit assertions.
 3. **Execution Command:**
    ```bash
-   dotnet test D:\SkillSwap\SkillSwap.sln --logger "console;verbosity=normal"
+   dotnet test SkillSwap.sln --configuration Release
    ```
 
 ---
@@ -209,12 +200,7 @@ If a merge conflict occurs when rebasing on `develop`:
 ## 10. Definition of Done (DoD)
 
 A task or PR is considered **Done** ONLY when:
-- [ ] Clean Architecture layer boundaries are strictly maintained:
-      - `SkillSwap.Application` MUST NOT depend on `SkillSwap.Infrastructure` or `SkillSwap.API`.
-      - `SkillSwap.Application` owns application contracts/abstractions used by Infrastructure implementations.
-      - `SkillSwap.Domain` contains core domain models and business concepts.
-      - `Infrastructure` implements persistence, Identity, SQL Server, and background services.
-      - `API` delegates all business behavior to Application services.
+- [ ] Clean Architecture layer boundaries are strictly maintained.
 - [ ] Domain entities (22 total) and enums comply with `DATABASE.md` and `Business-Rules.md`.
 - [ ] Request DTOs include comprehensive input validation.
 - [ ] Authorization checks are enforced at controller and application service levels.
@@ -225,7 +211,7 @@ A task or PR is considered **Done** ONLY when:
 - [ ] No unrelated files or formatting changes are included in the diff.
 - [ ] Swagger/OpenAPI annotations (`[ProducesResponseType]`) are added to all controller endpoints.
 - [ ] Documentation is updated in `docs/team/` if any contract was extended.
-- [ ] PR is reviewed and approved by at least 2 team members.
+- [ ] PR is reviewed and approved by at least 2 team developers.
 
 ---
 
@@ -235,26 +221,15 @@ The team follows the official 9-phase project execution roadmap:
 
 | Phase | Milestone Name | Primary Lead | Status | Parallel Execution Notes |
 |---|---|---|---|---|
-| **Phase 1** | **Foundation** | Architecture Agent | ✅ **COMPLETE** | Core solution, projects, DI, health check |
-| **Phase 2** | **Database & Domain** | Domain Agent | ✅ **COMPLETE** | 22 entities, 12 enums, EF configurations, initial migration |
-| **Phase 3** | **Core Business Engine** | Member 4 / Financial Lead | ✅ **COMPLETE** | Wallet, ledger, booking engine, locking, 74 tests |
-| **Phase 4** | **Auth & Profile** | Primarily Member 1 | **READY / IN PROGRESS** | May proceed in parallel with Phase 5 |
-| **Phase 5** | **Skills, Availability & Matching** | Primarily Member 2 | **READY / IN PROGRESS** | May proceed in parallel with Phase 4 |
-| **Phase 6** | **Swap Requests & Chat** | Primarily Member 3 | **PLANNED** | Integrates SwapRequest negotiations and SignalR chat |
-| **Phase 7** | **Platform Features** | Primarily Member 5 | **PLANNED** | Reviews, notifications, badges, safety, plans |
-| **Phase 8** | **Integration, Security & Hardening** | Cross-Team (All Members) | **PLANNED** | End-to-end integration, security audits, stress testing |
-| **Phase 9** | **Deployment** | DevOps / Team Lead | **PLANNED** | Production CI/CD, cloud deployment, release tagging |
-
-### Parallel Execution Guidelines:
-1. **Phases 4 & 5 Parallelism:**
-   - **Phase 4 (Member 1)** and **Phase 5 (Member 2)** can proceed in parallel immediately on their respective feature branches (`feature/auth-profile` and `feature/skills-matching`).
-   - Both members branch from the latest `develop` branch (which contains completed Phases 1–3).
-2. **Phase 6 Dependencies:**
-   - **Phase 6 (Member 3)** builds on the SwapRequest/Session contracts established in Phases 2 and 3, and consumes skills from Phase 5.
-3. **Phase 7 Dependencies:**
-   - **Phase 7 (Member 5)** integrates post-session reviews (dependent on Phase 3 completed sessions) and safety blocks.
-4. **Phases 8 & 9 Whole-Team Execution:**
-   - All 5 members participate in end-to-end hardening, load testing, and deployment.
+| **Phase 1** | **Foundation** | Architecture Team | ✅ **COMPLETE** | Core solution, projects, DI, health check |
+| **Phase 2** | **Database & Domain** | Domain Team | ✅ **COMPLETE** | 22 entities, 12 enums, EF configurations, initial migration |
+| **Phase 3** | **Core Business Engine** | Developer 1 | ✅ **COMPLETE** | Wallet, ledger, booking engine, locking, tests |
+| **Phase 4** | **Auth & Profile** | Developer 4 | ✅ **COMPLETE** | Identity, registration, login, JWT issuance, profiles |
+| **Phase 5** | **Skills, Availability & Matching** | Developer 3 | ✅ **COMPLETE** | Taxonomy, user skills, availability, dynamic matching |
+| **Phase 6** | **Swap Requests & Chat** | Developers 1 & 2 | ✅ **COMPLETE** | Swap proposals, SignalR ChatHub, Conversations REST API |
+| **Phase 7** | **Platform Features** | Developer 2 | ✅ **COMPLETE** | Reviews, notifications, badges, safety, plans |
+| **Phase 8** | **Integration, Security & Hardening** | All Four Developers | ✅ **COMPLETE** | End-to-end integration, security audits, 351 passing tests |
+| **Phase 9** | **Deployment & Hosting** | Developer 1 | ✅ **COMPLETE** | Live API on MonsterASP.NET, Swagger, Health check |
 
 ---
 
@@ -263,7 +238,7 @@ The team follows the official 9-phase project execution roadmap:
 If a critical regression or financial bug is identified on `main`:
 1. Branch directly from `main` into `hotfix/<issue-name>`.
 2. Implement the minimal targeted fix and write an automated test reproducing and fixing the defect.
-3. Member 4 and the Module Owner must review and approve the hotfix PR within 2 hours.
+3. Developer 1 and the Module Owner must review and approve the hotfix PR within 2 hours.
 4. Merge the hotfix into `main` and immediately cherry-pick/rebase into `develop`.
 
 ---
@@ -273,17 +248,17 @@ If a critical regression or financial bug is identified on `main`:
 To guarantee parallel productivity without friction, every developer must follow these 12 rules:
 
 1. **Pull Latest Develop:** Always pull the latest `develop` branch before starting work each morning.
-2. **Verify Ownership:** Check your assigned member document (`MEMBER-X-*.md`) before touching any file.
+2. **Verify Ownership:** Check your assigned developer document (`DEVELOPER-X-*.md`) before touching any file.
 3. **Document First:** If a feature requires changes to an interface or shared DTO, document the contract proposal before implementing.
 4. **Zero Silent Changes:** Never change DTO shapes, enum values, route paths, entity relationships, or business rules without explicit team agreement.
 5. **Small, Focused Commits:** Commit frequently with atomic, descriptive Conventional Commits.
 6. **One Logical Feature per PR:** Avoid giant PRs bundling multiple distinct features. Keep diffs small and reviewable.
 7. **No Drive-By Formatting:** Do not reformat entire files or reorder usings in files outside your direct ownership.
-8. **No Independent Migrations:** Never run `dotnet ef migrations add` yourself. Coordinate all schema changes through Member 4.
-9. **No Implementation Duplication:** Never copy-paste or reimplement another member's service. Inject their registered interface.
+8. **No Independent Migrations:** Never run `dotnet ef migrations add` yourself. Coordinate all schema changes through Developer 1.
+9. **No Implementation Duplication:** Never copy-paste or reimplement another developer's service. Inject their registered interface.
 10. **Strict Merge Discipline:** Code flows strictly: `feature` -> `develop` -> `main`. Direct pushes to `develop` or `main` are forbidden.
 11. **Rebase Promptly:** When another feature merges into `develop`, rebase your feature branch immediately to catch conflicts early.
 12. **Resolve by Authoritative Contract:** If a question arises during integration, do not guess. Consult `DATABASE.md`, `Business-Rules.md`, `FINANCIAL-ENGINE.md`, or the module owner.
 
 ---
-*SkillSwap Backend Engineering Team -- Workflow Standards*
+*SkillSwap Backend Engineering Team — Workflow Standards*

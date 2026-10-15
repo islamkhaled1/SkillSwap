@@ -23,59 +23,85 @@ public class FavoritesController : ControllerBase
         _currentUserService = currentUserService;
     }
 
+    /// <summary>
+    /// Lists all bookmarked favorite users for the authenticated caller.
+    /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyList<FavoriteDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<FavoriteUserDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetFavorites(CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _favoriteService.GetFavoritesAsync(callerId, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _favoriteService.GetFavoritesAsync(currentUserId.Value, cancellationToken);
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Adds another user to the authenticated caller's favorites list.
+    /// </summary>
     [HttpPost("{userId:guid}")]
-    [ProducesResponseType(typeof(FavoriteDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FavoriteUserDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> AddFavorite(Guid userId, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> AddFavorite(
+        Guid userId,
+        CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _favoriteService.AddFavoriteAsync(callerId, userId, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
+        var result = await _favoriteService.AddFavoriteAsync(currentUserId.Value, userId, cancellationToken);
         if (!result.IsSuccess)
         {
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(result.Error);
+            }
+
+            if (result.Error?.Contains("already", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Conflict(result.Error);
+            }
+
             return BadRequest(result.Error);
         }
 
-        return Ok(result.Value);
+        return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
+    /// <summary>
+    /// Removes a user from the authenticated caller's favorites list.
+    /// </summary>
     [HttpDelete("{userId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> RemoveFavorite(Guid userId, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveFavorite(
+        Guid userId,
+        CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _favoriteService.RemoveFavoriteAsync(callerId, userId, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
+        var result = await _favoriteService.RemoveFavoriteAsync(currentUserId.Value, userId, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error == "Favorite not found.")
-                return NotFound(result.Error);
-
-            return BadRequest(result.Error);
+            return NotFound(result.Error);
         }
 
         return NoContent();
-    }
-
-    private Guid GetCurrentUserId()
-    {
-        if (_currentUserService.UserId == null)
-            throw new UnauthorizedAccessException("User is not authenticated.");
-
-        return _currentUserService.UserId.Value;
     }
 }

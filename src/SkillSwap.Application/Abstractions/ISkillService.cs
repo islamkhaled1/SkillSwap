@@ -1,26 +1,15 @@
-﻿using SkillSwap.Application.Common;
+using SkillSwap.Application.Common;
 using SkillSwap.Application.DTOs.Skills;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace SkillSwap.Application.Abstractions
+namespace SkillSwap.Application.Abstractions;
+
+public interface ISkillService
 {
-    public interface ISkillService
-    {
-        Task<PagedResult<SkillDto>> SearchAsync(
-       string? searchTerm,
-       int? categoryId,
-       int pageNumber,
-       int pageSize,
-       CancellationToken cancellationToken = default);
-
-        Task<Result<SkillDto>> GetByIdAsync(
-            int id,
-            CancellationToken cancellationToken = default);
-
-        Task<Result<SkillDto>> CreateAsync(
-            CreateSkillRequest request,
-            CancellationToken cancellationToken = default);
-    }
+    Task<Result<IReadOnlyList<SkillDto>>> GetActiveSkillsAsync(int? categoryId = null, string? search = null, CancellationToken cancellationToken = default);
+    Task<Result<SkillDto>> GetSkillByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<Result<SkillDto>> CreateSkillAsync(CreateSkillRequest request, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<UserSkillDto>>> GetUserSkillsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<Result<UserSkillDto>> AddUserSkillAsync(Guid userId, AddUserSkillRequest request, CancellationToken cancellationToken = default);
+    Task<Result<UserSkillDto>> UpdateUserSkillAsync(Guid userId, long userSkillId, UpdateUserSkillRequest request, CancellationToken cancellationToken = default);
+    Task<Result> RemoveUserSkillAsync(Guid userId, long userSkillId, CancellationToken cancellationToken = default);
 }

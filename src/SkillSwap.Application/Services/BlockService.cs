@@ -6,33 +6,45 @@ using SkillSwap.Domain.Entities;
 
 namespace SkillSwap.Application.Services;
 
-public class BlockService : IBlockService
+public sealed class BlockService : IBlockService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
 
-    public BlockService(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public BlockService(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Result<UserBlockDto>> BlockUserAsync(
+    public async Task<Result<BlockedUserDto>> BlockUserAsync(
         Guid blockerId,
         Guid blockedId,
         CancellationToken cancellationToken = default)
     {
         if (blockerId == blockedId)
         {
-            return Result.Failure<UserBlockDto>("Cannot block yourself.");
+            return Result.Failure<BlockedUserDto>("You cannot block yourself.");
         }
 
-        var existing = await _context.UserBlocks
-            .FirstOrDefaultAsync(b => b.BlockerId == blockerId && b.BlockedId == blockedId, cancellationToken);
+        var blockedExists = await _context.UserProfiles
+            .AsNoTracking()
+            .AnyAsync(p => p.UserId == blockedId, cancellationToken);
 
-        if (existing != null)
+        if (!blockedExists)
         {
-            return Result.Success(new UserBlockDto(existing.BlockerId, existing.BlockedId, existing.CreatedAtUtc));
+            return Result.Failure<BlockedUserDto>($"User with ID {blockedId} was not found.");
+        }
+
+        var alreadyBlocked = await _context.UserBlocks
+            .AsNoTracking()
+            .AnyAsync(b => b.BlockerId == blockerId && b.BlockedId == blockedId, cancellationToken);
+
+        if (alreadyBlocked)
+        {
+            return Result.Failure<BlockedUserDto>("User is already blocked.");
         }
 
         var block = new UserBlock
@@ -45,7 +57,17 @@ public class BlockService : IBlockService
         _context.UserBlocks.Add(block);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new UserBlockDto(block.BlockerId, block.BlockedId, block.CreatedAtUtc));
+        var profile = await _context.UserProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == blockedId, cancellationToken);
+
+        return Result.Success(new BlockedUserDto
+        {
+            BlockedId = blockedId,
+            DisplayName = profile?.DisplayName ?? $"User {blockedId.ToString()[..8]}",
+            PhotoUrl = profile?.PhotoUrl,
+            CreatedAtUtc = block.CreatedAtUtc
+        });
     }
 
     public async Task<Result> UnblockUserAsync(
@@ -58,13 +80,45 @@ public class BlockService : IBlockService
 
         if (block == null)
         {
-            return Result.Failure("Block record not found.");
+            return Result.Failure("Block record was not found.");
         }
 
         _context.UserBlocks.Remove(block);
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    public async Task<Result<IReadOnlyList<BlockedUserDto>>> GetBlockedUsersAsync(
+        Guid blockerId,
+        CancellationToken cancellationToken = default)
+    {
+        var blocks = await _context.UserBlocks
+            .AsNoTracking()
+            .Where(b => b.BlockerId == blockerId)
+            .OrderByDescending(b => b.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var blockedIds = blocks.Select(b => b.BlockedId).ToList();
+
+        var profiles = await _context.UserProfiles
+            .AsNoTracking()
+            .Where(p => blockedIds.Contains(p.UserId))
+            .ToDictionaryAsync(p => p.UserId, cancellationToken);
+
+        var result = blocks.Select(b =>
+        {
+            profiles.TryGetValue(b.BlockedId, out var profile);
+            return new BlockedUserDto
+            {
+                BlockedId = b.BlockedId,
+                DisplayName = profile?.DisplayName ?? $"User {b.BlockedId.ToString()[..8]}",
+                PhotoUrl = profile?.PhotoUrl,
+                CreatedAtUtc = b.CreatedAtUtc
+            };
+        }).ToList();
+
+        return Result.Success<IReadOnlyList<BlockedUserDto>>(result);
     }
 
     public async Task<bool> IsBlockedAsync(
@@ -75,17 +129,7 @@ public class BlockService : IBlockService
         return await _context.UserBlocks
             .AsNoTracking()
             .AnyAsync(b => (b.BlockerId == userA && b.BlockedId == userB) ||
-                           (b.BlockerId == userB && b.BlockedId == userA), cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<Guid>> GetBlockedUserIdsAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
-    {
-        return await _context.UserBlocks
-            .AsNoTracking()
-            .Where(b => b.BlockerId == userId)
-            .Select(b => b.BlockedId)
-            .ToListAsync(cancellationToken);
+                           (b.BlockerId == userB && b.BlockedId == userA),
+                      cancellationToken);
     }
 }

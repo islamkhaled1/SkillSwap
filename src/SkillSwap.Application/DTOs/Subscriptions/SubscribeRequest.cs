@@ -1,3 +1,7 @@
 namespace SkillSwap.Application.DTOs.Subscriptions;
 
-public record SubscribeRequest(int PlanId);
+public sealed class SubscribeRequest
+{
+    public string? PlanCode { get; init; }
+    public int? PlanId { get; init; }
+}

@@ -7,18 +7,20 @@ using SkillSwap.Domain.Enums;
 
 namespace SkillSwap.Application.Services;
 
-public class NotificationService : INotificationService
+public sealed class NotificationService : INotificationService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
 
-    public NotificationService(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public NotificationService(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Result<IReadOnlyList<NotificationDto>>> GetNotificationsAsync(
+    public async Task<Result<IReadOnlyList<NotificationDto>>> GetUserNotificationsAsync(
         Guid userId,
         bool unreadOnly = false,
         CancellationToken cancellationToken = default)
@@ -32,19 +34,21 @@ public class NotificationService : INotificationService
             query = query.Where(n => !n.IsRead);
         }
 
-        var items = await query
+        var notifications = await query
             .OrderByDescending(n => n.CreatedAtUtc)
-            .Select(n => new NotificationDto(
-                n.Id,
-                n.UserId,
-                n.Type,
-                n.Payload,
-                n.IsRead,
-                n.ReadAtUtc,
-                n.CreatedAtUtc))
+            .Select(n => new NotificationDto
+            {
+                Id = n.Id,
+                UserId = n.UserId,
+                Type = n.Type,
+                Payload = n.Payload,
+                IsRead = n.IsRead,
+                ReadAtUtc = n.ReadAtUtc,
+                CreatedAtUtc = n.CreatedAtUtc
+            })
             .ToListAsync(cancellationToken);
 
-        return Result.Success<IReadOnlyList<NotificationDto>>(items);
+        return Result.Success<IReadOnlyList<NotificationDto>>(notifications);
     }
 
     public async Task<Result> MarkAsReadAsync(
@@ -57,12 +61,12 @@ public class NotificationService : INotificationService
 
         if (notification == null)
         {
-            return Result.Failure("Notification not found.");
+            return Result.Failure($"Notification with ID {notificationId} was not found.");
         }
 
         if (notification.UserId != userId)
         {
-            return Result.Failure("Unauthorized access to notification.");
+            return Result.Failure("You are not authorized to access this notification.");
         }
 
         if (!notification.IsRead)
@@ -93,22 +97,15 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notification);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new NotificationDto(
-            notification.Id,
-            notification.UserId,
-            notification.Type,
-            notification.Payload,
-            notification.IsRead,
-            notification.ReadAtUtc,
-            notification.CreatedAtUtc));
-    }
-
-    public async Task<int> GetUnreadCountAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
-    {
-        return await _context.Notifications
-            .AsNoTracking()
-            .CountAsync(n => n.UserId == userId && !n.IsRead, cancellationToken);
+        return Result.Success(new NotificationDto
+        {
+            Id = notification.Id,
+            UserId = notification.UserId,
+            Type = notification.Type,
+            Payload = notification.Payload,
+            IsRead = notification.IsRead,
+            ReadAtUtc = notification.ReadAtUtc,
+            CreatedAtUtc = notification.CreatedAtUtc
+        });
     }
 }

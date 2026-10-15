@@ -8,4 +8,3 @@ public class UserBadge
 
     public Badge Badge { get; set; } = null!;
 }
-  

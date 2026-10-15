@@ -1,7 +1,9 @@
 namespace SkillSwap.Application.DTOs.Reviews;
 
-public record UserReviewsSummaryDto(
-    Guid UserId,
-    double AverageRating,
-    int TotalReviews,
-    IReadOnlyList<ReviewDto> Reviews);
+public sealed class UserReviewsSummaryDto
+{
+    public Guid UserId { get; init; }
+    public double AverageRating { get; init; }
+    public int TotalReviews { get; init; }
+    public IReadOnlyList<ReviewDto> Reviews { get; init; } = [];
+}

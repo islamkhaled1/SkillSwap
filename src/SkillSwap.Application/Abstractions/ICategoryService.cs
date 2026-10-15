@@ -1,13 +1,11 @@
-﻿using SkillSwap.Application.DTOs.Skills;
-using System;
-using System.Collections.Generic;
-using System.Text;
+using SkillSwap.Application.Common;
+using SkillSwap.Application.DTOs.Skills;
 
-namespace SkillSwap.Application.Abstractions
+namespace SkillSwap.Application.Abstractions;
+
+public interface ICategoryService
 {
-    public interface ICategoryService
-    {
-        Task<IReadOnlyList<CategoryDto>> GetActiveAsync(
-        CancellationToken cancellationToken = default);
-    }
+    Task<Result<IReadOnlyList<CategoryDto>>> GetActiveCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<Result<CategoryDto>> GetCategoryByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<Result<CategoryDto>> CreateCategoryAsync(CreateCategoryRequest request, CancellationToken cancellationToken = default);
 }

@@ -1,4 +1,3 @@
-﻿
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -8,9 +7,9 @@ using SkillSwap.Application.DTOs.Skills;
 namespace SkillSwap.API.Controllers;
 
 [ApiController]
-[Route("api/skills")]
+[Route("api/[controller]")]
 [Produces("application/json")]
-public sealed class SkillsController : ControllerBase
+public class SkillsController : ControllerBase
 {
     private readonly ISkillService _skillService;
 
@@ -19,40 +18,31 @@ public sealed class SkillsController : ControllerBase
         _skillService = skillService;
     }
 
-    [AllowAnonymous]
+    /// <summary>
+    /// Searches and filters active skills by category and keyword.
+    /// </summary>
     [HttpGet]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> SearchSkills(
-        [FromQuery] string? searchTerm,
-        [FromQuery] int? categoryId,
-        [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 10,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await _skillService.SearchAsync(
-            searchTerm,
-            categoryId,
-            pageNumber,
-            pageSize,
-            cancellationToken);
-
-        return Ok(result);
-    }
-
     [AllowAnonymous]
-    [HttpGet("{id:int}")]
-    [ProducesResponseType(
-        typeof(SkillDto),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetSkillById(
-        int id,
+    [ProducesResponseType(typeof(IReadOnlyList<SkillDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSkills(
+        [FromQuery] int? categoryId,
+        [FromQuery] string? search,
         CancellationToken cancellationToken)
     {
-        var result = await _skillService.GetByIdAsync(
-            id,
-            cancellationToken);
+        var result = await _skillService.GetActiveSkillsAsync(categoryId, search, cancellationToken);
+        return Ok(result.Value);
+    }
 
+    /// <summary>
+    /// Retrieves an active skill by ID.
+    /// </summary>
+    [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(SkillDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSkillById(int id, CancellationToken cancellationToken)
+    {
+        var result = await _skillService.GetSkillByIdAsync(id, cancellationToken);
         if (!result.IsSuccess)
         {
             return NotFound(result.Error);
@@ -61,11 +51,12 @@ public sealed class SkillsController : ControllerBase
         return Ok(result.Value);
     }
 
-    [Authorize(Roles = "Admin")]
+    /// <summary>
+    /// Creates a new catalog skill under a category. Requires Admin role.
+    /// </summary>
     [HttpPost]
-    [ProducesResponseType(
-        typeof(SkillDto),
-        StatusCodes.Status201Created)]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(SkillDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -73,10 +64,7 @@ public sealed class SkillsController : ControllerBase
         [FromBody] CreateSkillRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _skillService.CreateAsync(
-            request,
-            cancellationToken);
-
+        var result = await _skillService.CreateSkillAsync(request, cancellationToken);
         if (!result.IsSuccess)
         {
             return BadRequest(result.Error);
@@ -84,7 +72,7 @@ public sealed class SkillsController : ControllerBase
 
         return CreatedAtAction(
             nameof(GetSkillById),
-            new { id = result.Value.Id },
+            new { id = result.Value!.Id },
             result.Value);
     }
 }

@@ -5,8 +5,15 @@ namespace SkillSwap.Application.Abstractions;
 
 public interface ISubscriptionService
 {
-    Task<Result<IReadOnlyList<SubscriptionPlanDto>>> GetPlansAsync(CancellationToken cancellationToken = default);
-    Task<Result<UserSubscriptionDto>> GetActiveSubscriptionAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<Result<UserSubscriptionDto>> SubscribeAsync(Guid userId, int planId, CancellationToken cancellationToken = default);
-    Task<int> GetMonthlyLearningMinutesCapAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<SubscriptionPlanDto>>> GetActivePlansAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<Result<UserSubscriptionDto>> GetCurrentSubscriptionAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<UserSubscriptionDto>> SubscribeAsync(
+        Guid userId,
+        SubscribeRequest request,
+        CancellationToken cancellationToken = default);
 }

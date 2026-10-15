@@ -1,68 +1,81 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using SkillSwap.API.Hubs;
 using SkillSwap.Application.Abstractions;
-using SkillSwap.Application.DTOs.Conversations;
+using SkillSwap.Application.DTOs.Chat;
 
 namespace SkillSwap.API.Controllers;
 
-/// <summary>
-/// Provides REST endpoints for conversations and in-conversation messaging.
-/// </summary>
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 public class ConversationsController : ControllerBase
 {
-    private readonly IConversationService _conversationService;
+    private readonly IChatService _chatService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IHubContext<ChatHub> _hubContext;
 
     public ConversationsController(
-        IConversationService conversationService,
-        ICurrentUserService currentUserService)
+        IChatService chatService,
+        ICurrentUserService currentUserService,
+        IHubContext<ChatHub> hubContext)
     {
-        _conversationService = conversationService;
+        _chatService = chatService;
         _currentUserService = currentUserService;
+        _hubContext = hubContext;
     }
 
-    // GET /api/conversations
     /// <summary>
-    /// Returns all conversations for the authenticated user.
+    /// Lists all conversations where the authenticated user is a participant.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ConversationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetConversations(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetMyConversations(CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _conversationService.GetConversationsAsync(callerId, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _chatService.GetUserConversationsAsync(currentUserId.Value, cancellationToken);
         return Ok(result.Value);
     }
 
-    // GET /api/conversations/{id}/messages?pageSize=20&beforeMessageId=...
     /// <summary>
-    /// Returns messages in the specified conversation, newest first with cursor pagination.
+    /// Retrieves a specific conversation's metadata by ID.
     /// </summary>
-    [HttpGet("{id:long}/messages")]
-    [ProducesResponseType(typeof(IReadOnlyList<MessageDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [HttpGet("{id:long}")]
+    [ProducesResponseType(typeof(ConversationDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetMessages(
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConversationById(
         long id,
-        [FromQuery] int pageSize = 20,
-        [FromQuery] long? beforeMessageId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _conversationService.GetMessagesAsync(
-            callerId, id, pageSize, beforeMessageId, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
+        var result = await _chatService.GetConversationByIdAsync(currentUserId.Value, id, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error!.Contains("access denied"))
-                return StatusCode(StatusCodes.Status403Forbidden, result.Error);
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(result.Error);
+            }
+
+            if (result.Error?.Contains("not a participant", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Forbid();
+            }
 
             return BadRequest(result.Error);
         }
@@ -70,67 +83,123 @@ public class ConversationsController : ControllerBase
         return Ok(result.Value);
     }
 
-    // POST /api/conversations/{id}/messages
     /// <summary>
-    /// Sends a new message in the specified conversation.
+    /// Retrieves paginated message history for a conversation.
+    /// </summary>
+    [HttpGet("{id:long}/messages")]
+    [ProducesResponseType(typeof(IReadOnlyList<MessageDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMessages(
+        long id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _chatService.GetConversationMessagesAsync(currentUserId.Value, id, page, pageSize, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(result.Error);
+            }
+
+            if (result.Error?.Contains("not a participant", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Forbid();
+            }
+
+            return BadRequest(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Sends a new message in a conversation via REST API (fallback to SignalR).
     /// </summary>
     [HttpPost("{id:long}/messages")]
     [ProducesResponseType(typeof(MessageDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SendMessage(
         long id,
         [FromBody] SendMessageRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _conversationService.SendMessageAsync(callerId, id, request, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
+        var result = await _chatService.SendMessageAsync(currentUserId.Value, id, request.Body, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error!.Contains("access denied"))
-                return StatusCode(StatusCodes.Status403Forbidden, result.Error);
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(result.Error);
+            }
+
+            if (result.Error?.Contains("not a participant", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Forbid();
+            }
 
             return BadRequest(result.Error);
         }
+
+        // Broadcast to SignalR clients in the conversation group
+        await _hubContext.Clients.Group($"conversation_{id}").SendAsync("ReceiveMessage", result.Value, cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
-    // POST /api/conversations/{id}/read
     /// <summary>
-    /// Marks all messages in the conversation as read for the authenticated user.
+    /// Updates the user's read cursor (LastReadMessageId) for a conversation.
     /// </summary>
     [HttpPost("{id:long}/read")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> MarkRead(
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkAsRead(
         long id,
-        CancellationToken cancellationToken = default)
+        [FromBody] MarkConversationReadRequest request,
+        CancellationToken cancellationToken)
     {
-        var callerId = GetCurrentUserId();
-        var result = await _conversationService.MarkReadAsync(callerId, id, cancellationToken);
+        var currentUserId = _currentUserService.UserId;
+        if (currentUserId == null)
+        {
+            return Unauthorized();
+        }
 
+        var result = await _chatService.MarkConversationAsReadAsync(currentUserId.Value, id, request.LastReadMessageId, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error!.Contains("access denied"))
-                return StatusCode(StatusCodes.Status403Forbidden, result.Error);
+            if (result.Error?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(result.Error);
+            }
+
+            if (result.Error?.Contains("not a participant", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Forbid();
+            }
 
             return BadRequest(result.Error);
         }
 
-        return Ok();
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private Guid GetCurrentUserId()
-    {
-        if (_currentUserService.UserId == null)
-            throw new UnauthorizedAccessException("User is not authenticated.");
-
-        return _currentUserService.UserId.Value;
+        return NoContent();
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -39,7 +39,7 @@ public sealed class JwtTokenService : IJwtTokenService
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SecretKey));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(

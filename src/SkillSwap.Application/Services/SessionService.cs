@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using SkillSwap.Application.Abstractions;
 using SkillSwap.Application.Common;
 using SkillSwap.Application.DTOs.Sessions;
@@ -153,6 +154,23 @@ public class SessionService : ISessionService
             await _context.SaveChangesAsync(cancellationToken);
         }
 
+        var otherPartyId = requestingUserId == session.LearnerId ? session.TeacherId : session.LearnerId;
+        _context.Notifications.Add(new Notification
+        {
+            UserId = otherPartyId,
+            Type = NotificationKind.SessionCancelled,
+            Payload = JsonSerializer.Serialize(new
+            {
+                SessionId = sessionId,
+                CancelledById = requestingUserId,
+                Reason = reason,
+                Message = $"Session #{sessionId} was cancelled."
+            }),
+            IsRead = false,
+            CreatedAtUtc = _dateTimeProvider.UtcNow
+        });
+
+        await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         var updated = await _context.Sessions.AsNoTracking().FirstAsync(s => s.Id == sessionId, cancellationToken);

@@ -7,167 +7,178 @@ using SkillSwap.Domain.Enums;
 
 namespace SkillSwap.Application.Services;
 
-public class SubscriptionService : ISubscriptionService
+public sealed class SubscriptionService : ISubscriptionService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
 
-    public const int DefaultFreeMinutes = 180;
-
-    public SubscriptionService(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public SubscriptionService(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Result<IReadOnlyList<SubscriptionPlanDto>>> GetPlansAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<SubscriptionPlanDto>>> GetActivePlansAsync(
+        CancellationToken cancellationToken = default)
     {
         var plans = await _context.SubscriptionPlans
             .AsNoTracking()
             .Where(p => p.IsActive)
             .OrderBy(p => p.Id)
-            .Select(p => new SubscriptionPlanDto(
-                p.Id,
-                p.Code,
-                p.Name,
-                p.MonthlyLearningMinutes,
-                p.Price,
-                p.PriorityMatching,
-                p.AdvancedSearch,
-                p.IsActive))
+            .Select(p => new SubscriptionPlanDto
+            {
+                Id = p.Id,
+                Code = p.Code,
+                Name = p.Name,
+                MonthlyLearningMinutes = p.MonthlyLearningMinutes,
+                Price = p.Price,
+                PriorityMatching = p.PriorityMatching,
+                AdvancedSearch = p.AdvancedSearch,
+                IsActive = p.IsActive
+            })
             .ToListAsync(cancellationToken);
 
         return Result.Success<IReadOnlyList<SubscriptionPlanDto>>(plans);
     }
 
-    public async Task<Result<UserSubscriptionDto>> GetActiveSubscriptionAsync(
+    public async Task<Result<UserSubscriptionDto>> GetCurrentSubscriptionAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        var subscription = await _context.UserSubscriptions
+        var userExists = await _context.UserProfiles
+            .AsNoTracking()
+            .AnyAsync(p => p.UserId == userId, cancellationToken);
+
+        if (!userExists)
+        {
+            return Result.Failure<UserSubscriptionDto>($"User with ID {userId} was not found.");
+        }
+
+        var activeSub = await _context.UserSubscriptions
             .Include(s => s.Plan)
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == SubscriptionStatus.Active, cancellationToken);
 
-        if (subscription?.Plan != null)
+        if (activeSub != null)
         {
-            return Result.Success(new UserSubscriptionDto(
-                subscription.Id,
-                subscription.UserId,
-                subscription.PlanId,
-                subscription.Plan.Code,
-                subscription.Plan.Name,
-                subscription.Plan.MonthlyLearningMinutes,
-                subscription.Plan.Price,
-                subscription.Plan.PriorityMatching,
-                subscription.Plan.AdvancedSearch,
-                subscription.StartsAtUtc,
-                subscription.EndsAtUtc,
-                subscription.Status,
-                subscription.CreatedAtUtc));
+            return Result.Success(MapToDto(activeSub));
         }
 
-        // Fallback to default Free plan contract
+        // Fallback: If user somehow lacks an active subscription record, assign default FREE plan
         var freePlan = await _context.SubscriptionPlans
-            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Code == "FREE", cancellationToken);
 
-        return Result.Success(new UserSubscriptionDto(
-            0,
-            userId,
-            freePlan?.Id ?? 1,
-            freePlan?.Code ?? "FREE",
-            freePlan?.Name ?? "Free Plan",
-            freePlan?.MonthlyLearningMinutes ?? DefaultFreeMinutes,
-            0.00m,
-            false,
-            false,
-            _dateTimeProvider.UtcNow,
-            null,
-            SubscriptionStatus.Active,
-            _dateTimeProvider.UtcNow));
+        if (freePlan == null)
+        {
+            return Result.Failure<UserSubscriptionDto>("Default subscription plan not found.");
+        }
+
+        var now = _dateTimeProvider.UtcNow;
+        var newSub = new UserSubscription
+        {
+            UserId = userId,
+            PlanId = freePlan.Id,
+            StartsAtUtc = now,
+            EndsAtUtc = null,
+            Status = SubscriptionStatus.Active,
+            CreatedAtUtc = now,
+            Plan = freePlan
+        };
+
+        _context.UserSubscriptions.Add(newSub);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(MapToDto(newSub));
     }
 
     public async Task<Result<UserSubscriptionDto>> SubscribeAsync(
         Guid userId,
-        int planId,
+        SubscribeRequest request,
         CancellationToken cancellationToken = default)
     {
-        var plan = await _context.SubscriptionPlans
-            .FirstOrDefaultAsync(p => p.Id == planId && p.IsActive, cancellationToken);
-
-        if (plan == null)
+        if (request == null || (string.IsNullOrWhiteSpace(request.PlanCode) && !request.PlanId.HasValue))
         {
-            return Result.Failure<UserSubscriptionDto>("Subscription plan not found or inactive.");
+            return Result.Failure<UserSubscriptionDto>("Plan code or plan ID must be specified.");
         }
 
-        var activeSubscription = await _context.UserSubscriptions
+        var userExists = await _context.UserProfiles
+            .AsNoTracking()
+            .AnyAsync(p => p.UserId == userId, cancellationToken);
+
+        if (!userExists)
+        {
+            return Result.Failure<UserSubscriptionDto>($"User with ID {userId} was not found.");
+        }
+
+        SubscriptionPlan? targetPlan = null;
+        if (!string.IsNullOrWhiteSpace(request.PlanCode))
+        {
+            var normalized = request.PlanCode.Trim().ToUpperInvariant();
+            targetPlan = await _context.SubscriptionPlans
+                .FirstOrDefaultAsync(p => p.Code.ToUpper() == normalized && p.IsActive, cancellationToken);
+        }
+        else if (request.PlanId.HasValue)
+        {
+            targetPlan = await _context.SubscriptionPlans
+                .FirstOrDefaultAsync(p => p.Id == request.PlanId.Value && p.IsActive, cancellationToken);
+        }
+
+        if (targetPlan == null)
+        {
+            return Result.Failure<UserSubscriptionDto>("Selected subscription plan was not found or is inactive.");
+        }
+
+        var currentActive = await _context.UserSubscriptions
             .Include(s => s.Plan)
             .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == SubscriptionStatus.Active, cancellationToken);
 
-        if (activeSubscription != null)
+        // Idempotent: if already active on the same plan, return it
+        if (currentActive != null && currentActive.PlanId == targetPlan.Id)
         {
-            if (activeSubscription.PlanId == plan.Id)
-            {
-                return Result.Success(new UserSubscriptionDto(
-                    activeSubscription.Id,
-                    activeSubscription.UserId,
-                    activeSubscription.PlanId,
-                    activeSubscription.Plan.Code,
-                    activeSubscription.Plan.Name,
-                    activeSubscription.Plan.MonthlyLearningMinutes,
-                    activeSubscription.Plan.Price,
-                    activeSubscription.Plan.PriorityMatching,
-                    activeSubscription.Plan.AdvancedSearch,
-                    activeSubscription.StartsAtUtc,
-                    activeSubscription.EndsAtUtc,
-                    activeSubscription.Status,
-                    activeSubscription.CreatedAtUtc));
-            }
-
-            activeSubscription.Status = SubscriptionStatus.Cancelled;
-            activeSubscription.EndsAtUtc = _dateTimeProvider.UtcNow;
+            return Result.Success(MapToDto(currentActive));
         }
 
-        var newSubscription = new UserSubscription
+        var now = _dateTimeProvider.UtcNow;
+        if (currentActive != null)
+        {
+            currentActive.Status = SubscriptionStatus.Cancelled;
+            currentActive.EndsAtUtc = now;
+        }
+
+        var newSub = new UserSubscription
         {
             UserId = userId,
-            PlanId = plan.Id,
-            StartsAtUtc = _dateTimeProvider.UtcNow,
+            PlanId = targetPlan.Id,
+            StartsAtUtc = now,
             EndsAtUtc = null,
             Status = SubscriptionStatus.Active,
-            CreatedAtUtc = _dateTimeProvider.UtcNow,
-            Plan = plan
+            CreatedAtUtc = now,
+            Plan = targetPlan
         };
 
-        _context.UserSubscriptions.Add(newSubscription);
+        _context.UserSubscriptions.Add(newSub);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(new UserSubscriptionDto(
-            newSubscription.Id,
-            newSubscription.UserId,
-            newSubscription.PlanId,
-            plan.Code,
-            plan.Name,
-            plan.MonthlyLearningMinutes,
-            plan.Price,
-            plan.PriorityMatching,
-            plan.AdvancedSearch,
-            newSubscription.StartsAtUtc,
-            newSubscription.EndsAtUtc,
-            newSubscription.Status,
-            newSubscription.CreatedAtUtc));
+        return Result.Success(MapToDto(newSub));
     }
 
-    public async Task<int> GetMonthlyLearningMinutesCapAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
+    private static UserSubscriptionDto MapToDto(UserSubscription sub)
     {
-        var subscription = await _context.UserSubscriptions
-            .Include(s => s.Plan)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == SubscriptionStatus.Active, cancellationToken);
-
-        return subscription?.Plan?.MonthlyLearningMinutes ?? DefaultFreeMinutes;
+        return new UserSubscriptionDto
+        {
+            Id = sub.Id,
+            UserId = sub.UserId,
+            PlanId = sub.PlanId,
+            PlanCode = sub.Plan?.Code ?? string.Empty,
+            PlanName = sub.Plan?.Name ?? string.Empty,
+            MonthlyLearningMinutes = sub.Plan?.MonthlyLearningMinutes ?? 0,
+            Price = sub.Plan?.Price,
+            StartsAtUtc = sub.StartsAtUtc,
+            EndsAtUtc = sub.EndsAtUtc,
+            Status = sub.Status,
+            CreatedAtUtc = sub.CreatedAtUtc
+        };
     }
 }

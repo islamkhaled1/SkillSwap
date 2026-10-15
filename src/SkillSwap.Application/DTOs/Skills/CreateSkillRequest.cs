@@ -1,18 +1,13 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Text;
 
-namespace SkillSwap.Application.DTOs.Skills
+namespace SkillSwap.Application.DTOs.Skills;
+
+public sealed class CreateSkillRequest
 {
-    public sealed class CreateSkillRequest
-    {
-        [Required]
-        [Range(1, int.MaxValue)]
-        public int CategoryId { get; init; }
+    [Range(1, int.MaxValue, ErrorMessage = "A valid CategoryId is required.")]
+    public int CategoryId { get; init; }
 
-        [Required]
-        [StringLength(100, MinimumLength = 2)]
-        public string Name { get; init; } = string.Empty;
-    }
+    [Required(ErrorMessage = "Skill name is required.")]
+    [StringLength(100, MinimumLength = 1, ErrorMessage = "Skill name must be between 1 and 100 characters.")]
+    public string Name { get; init; } = string.Empty;
 }
